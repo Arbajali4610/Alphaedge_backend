@@ -1,5 +1,8 @@
 const express = require('express');
-const UpstoxClient = require('upstox-js-sdk');
+const WebSocket = require('ws');
+const protobuf = require('protobufjs');
+const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -418,110 +421,251 @@ function applyFeed(message) {
   broadcast();
 }
 
-function startUpstox() {
+let marketWs = null;
+let marketReconnectTimer = null;
+let marketConnectInProgress = false;
+let marketProtoPromise = null;
 
+async function getMarketFeedType() {
+  if (!marketProtoPromise) {
+    marketProtoPromise = protobuf.load(
+      path.join(__dirname, 'schema.proto')
+    ).then((root) =>
+      root.lookupType(
+        'com.upstox.marketdatafeeder.rpc.proto.FeedResponse'
+      )
+    );
+  }
+
+  return marketProtoPromise;
+}
+
+async function authorizeMarketFeed() {
+  const token = process.env.UPSTOX_ACCESS_TOKEN;
+
+  if (!token || token === 'PASTE_ACCESS_TOKEN_HERE') {
+    throw new Error('UPSTOX_ACCESS_TOKEN is not configured');
+  }
+
+  const response = await fetch(
+    'https://api.upstox.com/v3/feed/market-data-feed/authorize',
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json'
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Upstox authorize failed: ${response.status}`
+    );
+  }
+
+  const data = await response.json();
+  const uri = data?.data?.authorized_redirect_uri;
+
+  if (!uri) {
+    throw new Error(
+      'No authorized websocket URI returned by Upstox'
+    );
+  }
+
+  return uri;
+}
+
+function scheduleMarketReconnect() {
+  if (marketReconnectTimer) return;
+
+  marketReconnectTimer = setTimeout(() => {
+    marketReconnectTimer = null;
+    startUpstox().catch(() => {
+      scheduleMarketReconnect();
+    });
+  }, 5000);
+}
+
+async function handleMarketMessage(data) {
+  try {
+    const FeedResponse = await getMarketFeedType();
+
+    const message =
+      FeedResponse.decode(
+        new Uint8Array(
+          Buffer.isBuffer(data)
+            ? data
+            : Buffer.from(data)
+        )
+      );
+
+    const json =
+      FeedResponse.toObject(
+        message,
+        {
+          longs: Number,
+          enums: String,
+          defaults: false
+        }
+      );
+
+    const feeds = json?.feeds;
+
+    if (!feeds || typeof feeds !== 'object') {
+      return;
+    }
+
+    for (const [key, feed] of Object.entries(feeds)) {
+      let name = null;
+
+      if (key === INSTRUMENTS.nifty) {
+        name = 'nifty';
+      } else if (key === INSTRUMENTS.sensex) {
+        name = 'sensex';
+      } else if (key === INSTRUMENTS.banknifty) {
+        name = 'banknifty';
+      }
+
+      if (!name) continue;
+
+      const ltpc =
+        feed?.ltpc ||
+        feed?.ff?.indexFF?.ltpc ||
+        feed?.fullFeed?.indexFF?.ltpc ||
+        feed?.fullFeed?.marketFF?.ltpc ||
+        feed?.indexFF?.ltpc;
+
+      if (!ltpc) continue;
+
+      const ltp = Number(ltpc.ltp);
+      const previousClose = Number(ltpc.cp);
+
+      if (!Number.isFinite(ltp)) continue;
+
+      const changePct =
+        Number.isFinite(previousClose) &&
+        previousClose !== 0
+          ? ((ltp - previousClose) / previousClose) * 100
+          : null;
+
+      latest[name] = {
+        ltp,
+        close: Number.isFinite(previousClose)
+          ? previousClose
+          : null,
+        changePct,
+        ltt: Number(ltpc.ltt) || null
+      };
+
+      latest.updatedAt = Date.now();
+      latest.error = null;
+
+      saveMarketSnapshot(name, latest[name]);
+    }
+
+    broadcast();
+  } catch (err) {
+    console.error(
+      'Market feed message error:',
+      err.message
+    );
+  }
+}
+
+async function startUpstox() {
   if (!ACCESS_TOKEN) {
-
     console.warn(
       'Live market feed disabled: set UPSTOX_ACCESS_TOKEN in Render Environment Variables.'
     );
-
     return;
   }
 
+  if (
+    marketWs &&
+    (
+      marketWs.readyState === WebSocket.OPEN ||
+      marketWs.readyState === WebSocket.CONNECTING
+    )
+  ) {
+    return;
+  }
+
+  if (marketConnectInProgress) return;
+  marketConnectInProgress = true;
+
   try {
+    const uri = await authorizeMarketFeed();
 
-    const defaultClient =
-      UpstoxClient.ApiClient.instance;
+    marketWs = new WebSocket(uri, {
+      followRedirects: true
+    });
 
-    const oauth =
-      defaultClient.authentications['OAUTH2'];
+    marketWs.binaryType = 'arraybuffer';
 
-    oauth.accessToken =
-      ACCESS_TOKEN;
-
-    const streamer =
-      new UpstoxClient.MarketDataStreamerV3(
-        [
-          INSTRUMENTS.nifty,
-          INSTRUMENTS.sensex,
-          INSTRUMENTS.banknifty
-        ],
-        'ltpc'
-      );
-
-    streamer.on('open', () => {
+    marketWs.on('open', () => {
+      marketConnectInProgress = false;
 
       latest.connected = true;
       latest.error = null;
-
       broadcast();
 
       try {
-
-        streamer.subscribe(
-          [
-            INSTRUMENTS.nifty,
-            INSTRUMENTS.sensex,
-            INSTRUMENTS.banknifty
-          ],
-          'ltpc'
+        marketWs.send(
+          Buffer.from(
+            JSON.stringify({
+              guid: crypto.randomUUID(),
+              method: 'sub',
+              data: {
+                mode: 'ltpc',
+                instrumentKeys: Object.values(INSTRUMENTS)
+              }
+            })
+          )
         );
-
       } catch (err) {
-
         latest.error =
           `Subscription error: ${err.message}`;
-
         broadcast();
       }
     });
 
-    streamer.on(
-      'message',
-      applyFeed
-    );
+    marketWs.on('message', handleMarketMessage);
 
-    streamer.on(
-      'error',
-      (err) => {
+    marketWs.on('error', (err) => {
+      marketConnectInProgress = false;
+      latest.connected = false;
+      latest.error =
+        err?.message ||
+        'Market feed connection error';
+      broadcast();
+    });
 
-        latest.connected = false;
+    marketWs.on('close', () => {
+      marketConnectInProgress = false;
+      marketWs = null;
 
-        latest.error =
-          err?.message ||
-          'Market feed connection error';
+      latest.connected = false;
+      latest.error = 'Market feed disconnected';
+      broadcast();
 
-        broadcast();
-      }
-    );
-
-    streamer.on(
-      'close',
-      () => {
-
-        latest.connected = false;
-
-        latest.error =
-          'Market feed disconnected';
-
-        broadcast();
-      }
-    );
-
-    streamer.connect();
-
+      scheduleMarketReconnect();
+    });
   } catch (err) {
+    marketConnectInProgress = false;
 
     latest.connected = false;
-
     latest.error =
-      err.message ||
+      err?.message ||
       'Unable to start market feed';
 
     broadcast();
 
-    console.error(err);
+    console.error(
+      'Market feed startup error:',
+      err.message
+    );
+
+    scheduleMarketReconnect();
   }
 }
 
