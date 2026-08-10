@@ -1,8 +1,5 @@
 const express = require('express');
-const WebSocket = require('ws');
-const protobuf = require('protobufjs');
-const path = require('path');
-const crypto = require('crypto');
+const UpstoxClient = require('upstox-js-sdk');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -421,251 +418,110 @@ function applyFeed(message) {
   broadcast();
 }
 
-let marketWs = null;
-let marketReconnectTimer = null;
-let marketConnectInProgress = false;
-let marketProtoPromise = null;
+function startUpstox() {
 
-async function getMarketFeedType() {
-  if (!marketProtoPromise) {
-    marketProtoPromise = protobuf.load(
-      path.join(__dirname, 'schema.proto')
-    ).then((root) =>
-      root.lookupType(
-        'com.upstox.marketdatafeeder.rpc.proto.FeedResponse'
-      )
-    );
-  }
-
-  return marketProtoPromise;
-}
-
-async function authorizeMarketFeed() {
-  const token = process.env.UPSTOX_ACCESS_TOKEN;
-
-  if (!token || token === 'PASTE_ACCESS_TOKEN_HERE') {
-    throw new Error('UPSTOX_ACCESS_TOKEN is not configured');
-  }
-
-  const response = await fetch(
-    'https://api.upstox.com/v3/feed/market-data-feed/authorize',
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json'
-      }
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(
-      `Upstox authorize failed: ${response.status}`
-    );
-  }
-
-  const data = await response.json();
-  const uri = data?.data?.authorized_redirect_uri;
-
-  if (!uri) {
-    throw new Error(
-      'No authorized websocket URI returned by Upstox'
-    );
-  }
-
-  return uri;
-}
-
-function scheduleMarketReconnect() {
-  if (marketReconnectTimer) return;
-
-  marketReconnectTimer = setTimeout(() => {
-    marketReconnectTimer = null;
-    startUpstox().catch(() => {
-      scheduleMarketReconnect();
-    });
-  }, 5000);
-}
-
-async function handleMarketMessage(data) {
-  try {
-    const FeedResponse = await getMarketFeedType();
-
-    const message =
-      FeedResponse.decode(
-        new Uint8Array(
-          Buffer.isBuffer(data)
-            ? data
-            : Buffer.from(data)
-        )
-      );
-
-    const json =
-      FeedResponse.toObject(
-        message,
-        {
-          longs: Number,
-          enums: String,
-          defaults: false
-        }
-      );
-
-    const feeds = json?.feeds;
-
-    if (!feeds || typeof feeds !== 'object') {
-      return;
-    }
-
-    for (const [key, feed] of Object.entries(feeds)) {
-      let name = null;
-
-      if (key === INSTRUMENTS.nifty) {
-        name = 'nifty';
-      } else if (key === INSTRUMENTS.sensex) {
-        name = 'sensex';
-      } else if (key === INSTRUMENTS.banknifty) {
-        name = 'banknifty';
-      }
-
-      if (!name) continue;
-
-      const ltpc =
-        feed?.ltpc ||
-        feed?.ff?.indexFF?.ltpc ||
-        feed?.fullFeed?.indexFF?.ltpc ||
-        feed?.fullFeed?.marketFF?.ltpc ||
-        feed?.indexFF?.ltpc;
-
-      if (!ltpc) continue;
-
-      const ltp = Number(ltpc.ltp);
-      const previousClose = Number(ltpc.cp);
-
-      if (!Number.isFinite(ltp)) continue;
-
-      const changePct =
-        Number.isFinite(previousClose) &&
-        previousClose !== 0
-          ? ((ltp - previousClose) / previousClose) * 100
-          : null;
-
-      latest[name] = {
-        ltp,
-        close: Number.isFinite(previousClose)
-          ? previousClose
-          : null,
-        changePct,
-        ltt: Number(ltpc.ltt) || null
-      };
-
-      latest.updatedAt = Date.now();
-      latest.error = null;
-
-      saveMarketSnapshot(name, latest[name]);
-    }
-
-    broadcast();
-  } catch (err) {
-    console.error(
-      'Market feed message error:',
-      err.message
-    );
-  }
-}
-
-async function startUpstox() {
   if (!ACCESS_TOKEN) {
+
     console.warn(
       'Live market feed disabled: set UPSTOX_ACCESS_TOKEN in Render Environment Variables.'
     );
+
     return;
   }
-
-  if (
-    marketWs &&
-    (
-      marketWs.readyState === WebSocket.OPEN ||
-      marketWs.readyState === WebSocket.CONNECTING
-    )
-  ) {
-    return;
-  }
-
-  if (marketConnectInProgress) return;
-  marketConnectInProgress = true;
 
   try {
-    const uri = await authorizeMarketFeed();
 
-    marketWs = new WebSocket(uri, {
-      followRedirects: true
-    });
+    const defaultClient =
+      UpstoxClient.ApiClient.instance;
 
-    marketWs.binaryType = 'arraybuffer';
+    const oauth =
+      defaultClient.authentications['OAUTH2'];
 
-    marketWs.on('open', () => {
-      marketConnectInProgress = false;
+    oauth.accessToken =
+      ACCESS_TOKEN;
+
+    const streamer =
+      new UpstoxClient.MarketDataStreamerV3(
+        [
+          INSTRUMENTS.nifty,
+          INSTRUMENTS.sensex,
+          INSTRUMENTS.banknifty
+        ],
+        'ltpc'
+      );
+
+    streamer.on('open', () => {
 
       latest.connected = true;
       latest.error = null;
+
       broadcast();
 
       try {
-        marketWs.send(
-          Buffer.from(
-            JSON.stringify({
-              guid: crypto.randomUUID(),
-              method: 'sub',
-              data: {
-                mode: 'ltpc',
-                instrumentKeys: Object.values(INSTRUMENTS)
-              }
-            })
-          )
+
+        streamer.subscribe(
+          [
+            INSTRUMENTS.nifty,
+            INSTRUMENTS.sensex,
+            INSTRUMENTS.banknifty
+          ],
+          'ltpc'
         );
+
       } catch (err) {
+
         latest.error =
           `Subscription error: ${err.message}`;
+
         broadcast();
       }
     });
 
-    marketWs.on('message', handleMarketMessage);
+    streamer.on(
+      'message',
+      applyFeed
+    );
 
-    marketWs.on('error', (err) => {
-      marketConnectInProgress = false;
-      latest.connected = false;
-      latest.error =
-        err?.message ||
-        'Market feed connection error';
-      broadcast();
-    });
+    streamer.on(
+      'error',
+      (err) => {
 
-    marketWs.on('close', () => {
-      marketConnectInProgress = false;
-      marketWs = null;
+        latest.connected = false;
 
-      latest.connected = false;
-      latest.error = 'Market feed disconnected';
-      broadcast();
+        latest.error =
+          err?.message ||
+          'Market feed connection error';
 
-      scheduleMarketReconnect();
-    });
+        broadcast();
+      }
+    );
+
+    streamer.on(
+      'close',
+      () => {
+
+        latest.connected = false;
+
+        latest.error =
+          'Market feed disconnected';
+
+        broadcast();
+      }
+    );
+
+    streamer.connect();
+
   } catch (err) {
-    marketConnectInProgress = false;
 
     latest.connected = false;
+
     latest.error =
-      err?.message ||
+      err.message ||
       'Unable to start market feed';
 
     broadcast();
 
-    console.error(
-      'Market feed startup error:',
-      err.message
-    );
-
-    scheduleMarketReconnect();
+    console.error(err);
   }
 }
 
@@ -907,6 +763,140 @@ app.post(
         success: false,
         message:
           'Registration failed'
+      });
+    }
+  }
+);
+
+
+/* =========================
+ACCOUNT RECOVERY
+========================= */
+
+app.post(
+  '/api/auth/forgot-client',
+  async (req, res) => {
+    if (!pool || !databaseReady) {
+      return res.status(503).json({
+        success: false,
+        message: 'Authentication database is unavailable'
+      });
+    }
+
+    try {
+      const rawContact = String(req.body.contact || '').trim();
+      const email = normalizeEmail(rawContact);
+      const phone = normalizePhone(rawContact).replace(/\D/g, '');
+
+      if (!rawContact) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registered mobile number or email is required'
+        });
+      }
+
+      const result = await pool.query(
+        `SELECT client_id
+         FROM clients
+         WHERE LOWER(email) = $1
+            OR REGEXP_REPLACE(phone, '\\D', '', 'g') = $2
+         LIMIT 1`,
+        [email, phone]
+      );
+
+      if (!result.rows.length) {
+        return res.status(404).json({
+          success: false,
+          message: 'No account found with that mobile number or email'
+        });
+      }
+
+      return res.json({
+        success: true,
+        clientId: result.rows[0].client_id
+      });
+    } catch (err) {
+      console.error('Forgot Client ID error:', err.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to recover Client ID'
+      });
+    }
+  }
+);
+
+app.post(
+  '/api/auth/forgot-password',
+  async (req, res) => {
+    if (!pool || !databaseReady) {
+      return res.status(503).json({
+        success: false,
+        message: 'Authentication database is unavailable'
+      });
+    }
+
+    try {
+      const clientId = String(req.body.clientId || '').trim().toUpperCase();
+      const rawContact = String(req.body.contact || '').trim();
+      const email = normalizeEmail(rawContact);
+      const phone = normalizePhone(rawContact).replace(/\D/g, '');
+      const password = String(req.body.password || '');
+
+      if (!clientId || !rawContact || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client ID, registered mobile/email and new password are required'
+        });
+      }
+
+      if (!/^AE\d{6}$/.test(clientId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Client ID'
+        });
+      }
+
+      if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[@#₹]/.test(password)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password must be minimum 8 characters and contain 1 uppercase, 1 number and 1 special character (@/#/₹).'
+        });
+      }
+
+      const result = await pool.query(
+        `SELECT client_id
+         FROM clients
+         WHERE client_id = $1
+           AND (LOWER(email) = $2
+                OR REGEXP_REPLACE(phone, '\\D', '', 'g') = $3)
+         LIMIT 1`,
+        [clientId, email, phone]
+      );
+
+      if (!result.rows.length) {
+        return res.status(404).json({
+          success: false,
+          message: 'Client ID and registered contact do not match'
+        });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      await pool.query(
+        `UPDATE clients
+         SET password_hash = $1
+         WHERE client_id = $2`,
+        [passwordHash, clientId]
+      );
+
+      return res.json({
+        success: true,
+        message: 'Password reset successfully'
+      });
+    } catch (err) {
+      console.error('Forgot password error:', err.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to reset password'
       });
     }
   }

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
   },
   "engines": {
     "node": ">=20"
@@ -18,6 +18,7 @@
     "express-session": "^1.18.1",
     "pg": "^8.16.3",
     "protobufjs": "^7.4.0",
+    "upstox-js-sdk": "^2.18.0",
     "ws": "^8.18.0"
   }
 }
