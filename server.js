@@ -22,8 +22,7 @@ app.use((req, res, next) => {
   const configured = process.env.FRONTEND_ORIGIN;
   const allowed = !origin || origin === 'null' ||
     (configured && origin === configured) ||
-    origin === 'https://alphaedge-c3yf.onrender.com' ||
-    origin === 'https://alphaedge-live.onrender.com' ||
+    /^https:\/\/[^/]+\.onrender\.com$/.test(origin) ||
     /^https:\/\/[^/]+\.github\.io$/.test(origin) ||
     /^http:\/\/localhost(?::\d+)?$/.test(origin) ||
     /^http:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin);
@@ -441,6 +440,21 @@ async function refreshEquityQuotes(force = false) {
 
   return quoteRefreshPromise;
 }
+
+app.get('/api/health', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    success: true,
+    service: 'AlphaEdge backend',
+    databaseReady,
+    authReady: Boolean(pool && databaseReady),
+    marketFeedConfigured: Boolean(ACCESS_TOKEN)
+  });
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(require('path').join(__dirname, 'admin.html'));
+});
 
 app.use(express.static(__dirname));
 
