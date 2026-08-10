@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: alphaedge-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: UPSTOX_ACCESS_TOKEN
+        sync: false
+      - key: FRONTEND_ORIGIN
+        value: https://alphaedge-c3yf.onrender.com

@@ -22,6 +22,8 @@ app.use((req, res, next) => {
   const configured = process.env.FRONTEND_ORIGIN;
   const allowed = !origin || origin === 'null' ||
     (configured && origin === configured) ||
+    origin === 'https://alphaedge-c3yf.onrender.com' ||
+    origin === 'https://alphaedge-live.onrender.com' ||
     /^https:\/\/[^/]+\.github\.io$/.test(origin) ||
     /^http:\/\/localhost(?::\d+)?$/.test(origin) ||
     /^http:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin);
@@ -1131,7 +1133,10 @@ app.post(
 
       const remember = req.body.remember === true;
       req.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 30 : null;
-      req.session.save(() => {});
+
+      await new Promise((resolve, reject) => {
+        req.session.save(err => err ? reject(err) : resolve());
+      });
 
       return res.json({
         success: true,
