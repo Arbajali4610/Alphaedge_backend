@@ -318,6 +318,130 @@ app.get('/api/market/history-v3', async (req, res) => {
   }
 });
 
+
+/* =========================
+EQUITY HUB — UPSTOX REST PROXY
+The browser must not call Yahoo directly. Use the server-side Upstox token
+for quotes and historical candles so Equity Hub uses the same data source as
+Dashboard/Watchlist and avoids browser CORS/provider failures.
+========================= */
+
+function validInstrumentKey(key) {
+  return typeof key === 'string' &&
+    /^(NSE_EQ|BSE_EQ|NSE_INDEX|BSE_INDEX)\|[A-Za-z0-9._:-]+$/.test(key);
+}
+
+app.get('/api/equity/quotes', async (req, res) => {
+  if (!ACCESS_TOKEN) {
+    return res.status(503).json({ success: false, message: 'Live market data is not configured' });
+  }
+
+  const keys = String(req.query.instrument_key || '')
+    .split(',')
+    .map(v => decodeURIComponent(v).trim())
+    .filter(validInstrumentKey);
+
+  if (!keys.length) {
+    return res.status(400).json({ success: false, message: 'instrument_key is required' });
+  }
+  if (keys.length > 500) {
+    return res.status(400).json({ success: false, message: 'Maximum 500 instruments per request' });
+  }
+
+  try {
+    const url = `https://api.upstox.com/v3/market-quote/ltp?instrument_key=${encodeURIComponent(keys.join(','))}`;
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        message: response.status === 401 ? 'Upstox access token expired or invalid' : 'Unable to load equity quotes'
+      });
+    }
+
+    const quotes = {};
+    for (const [token, q] of Object.entries(body?.data || {})) {
+      const price = Number(q?.last_price);
+      const close = Number(q?.cp);
+      if (!Number.isFinite(price)) continue;
+      quotes[token] = {
+        price,
+        close: Number.isFinite(close) ? close : null,
+        changePct: Number.isFinite(close) && close !== 0 ? ((price - close) / close) * 100 : null,
+        volume: Number(q?.volume) || 0,
+        ltq: Number(q?.ltq) || 0
+      };
+    }
+
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, quotes });
+  } catch (err) {
+    console.error('Equity quote proxy error:', err.message);
+    return res.status(502).json({ success: false, message: 'Unable to load equity quotes' });
+  }
+});
+
+app.get('/api/equity/history', async (req, res) => {
+  if (!ACCESS_TOKEN) {
+    return res.status(503).json({ success: false, message: 'Live market data is not configured' });
+  }
+
+  const instrumentKey = String(req.query.instrument_key || '').trim();
+  const range = String(req.query.range || '5y').toLowerCase();
+  const years = range === '1y' ? 1 : range === '3y' ? 3 : range === '5y' ? 5 : null;
+
+  if (!validInstrumentKey(instrumentKey) || !years) {
+    return res.status(400).json({ success: false, message: 'Invalid instrument_key or range' });
+  }
+
+  try {
+    const now = new Date();
+    const toDate = now.toISOString().slice(0, 10);
+    const from = new Date(now);
+    from.setUTCFullYear(from.getUTCFullYear() - years);
+    const fromDate = from.toISOString().slice(0, 10);
+
+    // Monthly candles keep the 5-year chart small while preserving long-term trend.
+    const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/months/1/${toDate}/${fromDate}`;
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+    const body = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        message: response.status === 401 ? 'Upstox access token expired or invalid' : 'Historical market data unavailable'
+      });
+    }
+
+    const candles = Array.isArray(body?.data?.candles) ? body.data.candles : [];
+    const history = candles.map(c => ({
+      date: c[0],
+      open: Number(c[1]),
+      high: Number(c[2]),
+      low: Number(c[3]),
+      close: Number(c[4]),
+      volume: Number(c[5]) || 0
+    })).filter(c => Number.isFinite(c.close)).reverse();
+
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, range, history });
+  } catch (err) {
+    console.error('Equity historical proxy error:', err.message);
+    return res.status(502).json({ success: false, message: 'Historical market data unavailable' });
+  }
+});
+
 app.get('/api/market-stream', (req, res) => {
 
   res.set({
