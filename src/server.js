@@ -191,7 +191,7 @@ const MARKET_SYMBOLS = [
   'KOTAKBANK', 'LT', 'M&M', 'MARUTI', 'MOTHERSON', 'NESTLEIND', 'NTPC',
   'ONGC', 'POWERGRID', 'RELIANCE', 'SBILIFE', 'SBIN', 'SHRIRAMFIN',
   'SUNPHARMA', 'TATACONSUM', 'TATAMOTORS', 'TATASTEEL', 'TECHM', 'TITAN',
-  'TRENT', 'ULTRACEMCO', 'WIPRO', 'INFY', 'HINDPETRO', 'BPCL', 'PIDILITIND',
+  'TRENT', 'ULTRACEMCO', 'WIPRO', 'HINDPETRO', 'BPCL', 'PIDILITIND',
   'SIEMENS', 'TATAELXSI', 'DABUR', 'INDIGO', 'AMBUJACEM'
 ];
 
@@ -215,6 +215,52 @@ const SYMBOL_TO_NAME = {
   BPCL: 'bharat petroleum', PIDILITIND: 'pidilite industries', SIEMENS: 'siemens', TATAELXSI: 'tata elxsi',
   DABUR: 'dabur india', INDIGO: 'interglobe aviation', AMBUJACEM: 'ambuja cements'
 };
+
+// Build reverse lookups once so the API accepts either the NSE trading symbol
+// (e.g. ADANIENT), the internal lowercase key (e.g. adanient), or the
+// human-readable company name (e.g. "Adani Enterprises").
+const SYMBOL_KEY_TO_SYMBOL = new Map(
+  MARKET_SYMBOLS.map((symbol) => [symbol.toLowerCase(), symbol])
+);
+
+const COMPANY_NAME_TO_KEY = new Map(
+  Object.entries(SYMBOL_TO_NAME).map(([symbol, name]) => [name.toLowerCase(), symbol.toLowerCase()])
+);
+
+function normalizeLookup(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+const NORMALIZED_SYMBOL_TO_KEY = new Map(
+  MARKET_SYMBOLS.map((symbol) => [normalizeLookup(symbol), symbol.toLowerCase()])
+);
+
+function resolveMarketKey(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const lower = raw.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(INSTRUMENTS, lower)) {
+    return lower;
+  }
+
+  const symbolKey = NORMALIZED_SYMBOL_TO_KEY.get(normalizeLookup(raw));
+  if (symbolKey) return symbolKey;
+
+  const nameKey = COMPANY_NAME_TO_KEY.get(lower);
+  if (nameKey) return nameKey;
+
+  const normalizedName = normalizeLookup(raw);
+  for (const [name, key] of COMPANY_NAME_TO_KEY.entries()) {
+    if (normalizeLookup(name) === normalizedName) return key;
+  }
+
+  return null;
+}
 
 for (const symbol of MARKET_SYMBOLS) {
   const key = symbol.toLowerCase();
@@ -243,13 +289,22 @@ async function resolveMarketInstruments() {
 
     for (const item of instruments) {
       if (item?.segment !== 'NSE_EQ' || item?.instrument_type !== 'EQ') continue;
-      const symbol = String(item.trading_symbol || '').toUpperCase();
-      if (symbol && !bySymbol.has(symbol)) bySymbol.set(symbol, item.instrument_key);
+
+      const tradingSymbol = String(item.trading_symbol || '').toUpperCase();
+      const shortName = String(item.short_name || '').toUpperCase();
+      const instrumentName = String(item.name || '').toUpperCase();
+
+      for (const candidate of [tradingSymbol, shortName, instrumentName]) {
+        const normalized = normalizeLookup(candidate);
+        if (normalized && !bySymbol.has(normalized)) {
+          bySymbol.set(normalized, item.instrument_key);
+        }
+      }
     }
 
     for (const symbol of MARKET_SYMBOLS) {
       const key = symbol.toLowerCase();
-      const instrumentKey = bySymbol.get(symbol.toUpperCase());
+      const instrumentKey = bySymbol.get(normalizeLookup(symbol)) || bySymbol.get(normalizeLookup(SYMBOL_TO_NAME[symbol] || ''));
       if (instrumentKey) INSTRUMENTS[key] = instrumentKey;
     }
 
@@ -283,6 +338,10 @@ rebuildInstrumentAliases();
 
 let latest = {
   ...Object.fromEntries(Object.keys(INSTRUMENTS).map(name => [name, null])),
+  // Compatibility aliases for the frontend. Equity Hub commonly indexes
+  // quotes by the NSE symbol (ADANIENT), while older pages used lowercase
+  // internal keys. Keep both forms pointing to the same quote object.
+  ...Object.fromEntries(MARKET_SYMBOLS.map(symbol => [symbol, null])),
   connected: false,
   updatedAt: null,
   error: ACCESS_TOKEN ? null : 'UPSTOX_ACCESS_TOKEN is not configured'
@@ -382,16 +441,24 @@ app.get('/api/market/history', async (req, res) => {
 });
 
 app.get('/api/market/history-v3', async (req, res) => {
-  const symbol = String(req.query.symbol || 'nifty').toLowerCase();
+  const requestedSymbol = String(req.query.symbol || 'nifty').trim();
   const range = String(req.query.range || '5y').toLowerCase();
-  const instrumentKey = INSTRUMENTS[symbol];
+  const symbol = resolveMarketKey(requestedSymbol);
+  const instrumentKey = symbol ? INSTRUMENTS[symbol] : null;
   const years = range === '1y' ? 1 : range === '3y' ? 3 : range === '5y' ? 5 : null;
 
   if (!instrumentKey || !years) {
-    return res.status(400).json({ success: false, message: 'Invalid chart symbol or range' });
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid chart symbol or range'
+    });
   }
+
   if (!ACCESS_TOKEN) {
-    return res.status(503).json({ success: false, message: 'Live market data is not configured' });
+    return res.status(503).json({
+      success: false,
+      message: 'Live market data is not configured'
+    });
   }
 
   try {
@@ -400,25 +467,69 @@ app.get('/api/market/history-v3', async (req, res) => {
     const from = new Date(now);
     from.setUTCFullYear(from.getUTCFullYear() - years);
     const fromDate = from.toISOString().slice(0, 10);
-    const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/${toDate}/${fromDate}`;
+
+    const url =
+      `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/${toDate}/${fromDate}`;
+
     const response = await fetch(url, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${ACCESS_TOKEN}` }
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${ACCESS_TOKEN}`
+      }
     });
+
     const body = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      return res.status(response.status).json({ success: false, message: response.status === 401 ? 'Upstox access token expired or invalid' : 'Historical market data unavailable' });
+      console.error(
+        `Historical data failed for ${requestedSymbol} (${instrumentKey}):`,
+        response.status,
+        body?.errors || body?.message || ''
+      );
+
+      return res.status(response.status).json({
+        success: false,
+        message:
+          response.status === 401
+            ? 'Upstox access token expired or invalid'
+            : 'Historical market data unavailable'
+      });
     }
-    const candles = Array.isArray(body?.data?.candles) ? body.data.candles : [];
-    const history = candles.map(c => ({
-      date: c[0], open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5])
-    })).filter(c => Number.isFinite(c.close)).reverse();
+
+    const candles = Array.isArray(body?.data?.candles)
+      ? body.data.candles
+      : [];
+
+    const history = candles
+      .map((c) => ({
+        date: c[0],
+        open: Number(c[1]),
+        high: Number(c[2]),
+        low: Number(c[3]),
+        close: Number(c[4]),
+        volume: Number(c[5])
+      }))
+      .filter((c) => Number.isFinite(c.close))
+      .reverse();
+
     res.set('Cache-Control', 'no-store');
-    return res.json({ success: true, symbol, range, history });
+
+    return res.json({
+      success: true,
+      symbol: SYMBOL_KEY_TO_SYMBOL.get(symbol) || symbol,
+      range,
+      history
+    });
   } catch (err) {
     console.error('Historical market data error:', err.message);
-    return res.status(502).json({ success: false, message: 'Historical market data unavailable' });
+
+    return res.status(502).json({
+      success: false,
+      message: 'Historical market data unavailable'
+    });
   }
 });
+
 
 app.get('/api/market-stream', (req, res) => {
 
@@ -504,8 +615,15 @@ function updateLatestForInstrument(key, ltpc) {
 
   const names = INSTRUMENT_ALIASES.get(key) || (INSTRUMENT_NAMES[key] ? [INSTRUMENT_NAMES[key]] : []);
   for (const name of names) {
-    latest[name] = { ...value };
-    saveMarketSnapshot(name, latest[name]);
+    const quote = { ...value };
+    latest[name] = quote;
+
+    // Also publish by the actual NSE trading symbol so Equity Hub cards,
+    // search results and detail pages can consume the same live quote.
+    const symbol = SYMBOL_KEY_TO_SYMBOL.get(name);
+    if (symbol) latest[symbol] = quote;
+
+    saveMarketSnapshot(name, quote);
   }
   latest.updatedAt = Date.now();
   latest.error = null;
