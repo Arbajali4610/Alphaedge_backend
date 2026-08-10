@@ -17,6 +17,24 @@ app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const configured = process.env.FRONTEND_ORIGIN;
+  const allowed = !origin || origin === 'null' ||
+    (configured && origin === configured) ||
+    /^https:\/\/[^/]+\.github\.io$/.test(origin) ||
+    /^http:\/\/localhost(?::\d+)?$/.test(origin) ||
+    /^http:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin);
+  if (allowed && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 /* =========================
 DATABASE
@@ -120,9 +138,9 @@ if (pool) {
 
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 1000 * 60 * 60 * 24 * 7
+        secure: true,
+        sameSite: 'none',
+        maxAge: null
       }
     })
   );
@@ -146,18 +164,24 @@ MARKET DATA
 const INSTRUMENTS = {
   nifty: 'NSE_INDEX|Nifty 50',
   sensex: 'BSE_INDEX|SENSEX',
-  banknifty: 'NSE_INDEX|Nifty Bank'
+  banknifty: 'NSE_INDEX|Nifty Bank',
+  reliance: 'NSE_EQ|INE002A01018',
+  tcs: 'NSE_EQ|INE467B01029',
+  hdfcbank: 'NSE_EQ|INE040A01034',
+  icicibank: 'NSE_EQ|INE090A01021',
+  sbin: 'NSE_EQ|INE062A01020',
+  airtel: 'NSE_EQ|INE397D01024',
+  lt: 'NSE_EQ|INE018A01030',
+  axisbank: 'NSE_EQ|INE238A01034',
+  kotakbank: 'NSE_EQ|INE237A01036'
 };
+const INSTRUMENT_NAMES = Object.fromEntries(Object.entries(INSTRUMENTS).map(([name,key]) => [key,name]));
 
 let latest = {
-  nifty: null,
-  sensex: null,
-  banknifty: null,
+  ...Object.fromEntries(Object.keys(INSTRUMENTS).map(name => [name, null])),
   connected: false,
   updatedAt: null,
-  error: ACCESS_TOKEN
-    ? null
-    : 'UPSTOX_ACCESS_TOKEN is not configured'
+  error: ACCESS_TOKEN ? null : 'UPSTOX_ACCESS_TOKEN is not configured'
 };
 
 async function saveMarketSnapshot(name, value) {
@@ -250,6 +274,45 @@ app.get('/api/market/history', async (req, res) => {
       success: false,
       message: 'Unable to load market history'
     });
+  }
+});
+
+app.get('/api/market/history-v3', async (req, res) => {
+  const symbol = String(req.query.symbol || 'nifty').toLowerCase();
+  const range = String(req.query.range || '5y').toLowerCase();
+  const instrumentKey = INSTRUMENTS[symbol];
+  const years = range === '1y' ? 1 : range === '3y' ? 3 : range === '5y' ? 5 : null;
+
+  if (!instrumentKey || !years) {
+    return res.status(400).json({ success: false, message: 'Invalid chart symbol or range' });
+  }
+  if (!ACCESS_TOKEN) {
+    return res.status(503).json({ success: false, message: 'Live market data is not configured' });
+  }
+
+  try {
+    const now = new Date();
+    const toDate = now.toISOString().slice(0, 10);
+    const from = new Date(now);
+    from.setUTCFullYear(from.getUTCFullYear() - years);
+    const fromDate = from.toISOString().slice(0, 10);
+    const url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/${toDate}/${fromDate}`;
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${ACCESS_TOKEN}` }
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, message: response.status === 401 ? 'Upstox access token expired or invalid' : 'Historical market data unavailable' });
+    }
+    const candles = Array.isArray(body?.data?.candles) ? body.data.candles : [];
+    const history = candles.map(c => ({
+      date: c[0], open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5])
+    })).filter(c => Number.isFinite(c.close)).reverse();
+    res.set('Cache-Control', 'no-store');
+    return res.json({ success: true, symbol, range, history });
+  } catch (err) {
+    console.error('Historical market data error:', err.message);
+    return res.status(502).json({ success: false, message: 'Historical market data unavailable' });
   }
 });
 
@@ -354,19 +417,7 @@ function applyFeed(message) {
     of Object.entries(feeds)
   ) {
 
-    let name = null;
-
-    if (key === INSTRUMENTS.nifty) {
-      name = 'nifty';
-    }
-
-    else if (key === INSTRUMENTS.sensex) {
-      name = 'sensex';
-    }
-
-    else if (key === INSTRUMENTS.banknifty) {
-      name = 'banknifty';
-    }
+    const name = INSTRUMENT_NAMES[key];
 
     if (!name) continue;
 
@@ -497,10 +548,7 @@ function startUpstox() {
       if (!feeds || typeof feeds !== 'object') return;
 
       for (const [key, feed] of Object.entries(feeds)) {
-        let name = null;
-        if (key === INSTRUMENTS.nifty) name = 'nifty';
-        else if (key === INSTRUMENTS.sensex) name = 'sensex';
-        else if (key === INSTRUMENTS.banknifty) name = 'banknifty';
+        const name = INSTRUMENT_NAMES[key];
         if (!name) continue;
 
         const ltpc = extractLtpc(feed);
@@ -552,11 +600,7 @@ function startUpstox() {
           method: 'sub',
           data: {
             mode: 'ltpc',
-            instrumentKeys: [
-              INSTRUMENTS.nifty,
-              INSTRUMENTS.sensex,
-              INSTRUMENTS.banknifty
-            ]
+            instrumentKeys: Object.values(INSTRUMENTS)
           }
         };
 
@@ -1085,6 +1129,10 @@ app.post(
       req.session.userType =
         'client';
 
+      const remember = req.body.remember === true;
+      req.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 30 : null;
+      req.session.save(() => {});
+
       return res.json({
         success: true,
 
@@ -1096,7 +1144,9 @@ app.post(
             client.name,
 
           email:
-            client.email
+            client.email,
+          phone:
+            client.phone
         }
       });
 
