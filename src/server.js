@@ -1835,6 +1835,101 @@ app.post(
   }
 );
 
+
+/* =========================
+ADMIN AUTH / CLIENTS
+========================= */
+
+function requireAdmin(req, res, next) {
+  if (!req.session?.adminUser) {
+    return res.status(401).json({
+      success: false,
+      message: 'Admin login required'
+    });
+  }
+  next();
+}
+
+app.post('/api/admin/login', async (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const password = String(req.body.password || '');
+
+  const expectedUser = String(process.env.ADMIN_USERNAME || '').trim();
+  const expectedPass = String(process.env.ADMIN_PASSWORD || '');
+
+  if (!expectedUser || !expectedPass) {
+    return res.status(503).json({
+      success: false,
+      message: 'Admin credentials are not configured'
+    });
+  }
+
+  if (username !== expectedUser || password !== expectedPass) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid admin username or password'
+    });
+  }
+
+  req.session.adminUser = username;
+  req.session.userType = 'admin';
+
+  return res.json({
+    success: true,
+    admin: { username }
+  });
+});
+
+app.get('/api/admin/me', requireAdmin, (req, res) => {
+  res.json({
+    success: true,
+    admin: { username: req.session.adminUser }
+  });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  req.session.adminUser = null;
+  if (req.session.userType === 'admin') req.session.userType = null;
+  req.session.save(() => {
+    res.json({ success: true });
+  });
+});
+
+app.get('/api/admin/clients', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database unavailable'
+    });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT
+        client_id,
+        name,
+        phone,
+        email,
+        status,
+        created_at
+      FROM clients
+      ORDER BY created_at DESC
+    `);
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      clients: result.rows
+    });
+  } catch (err) {
+    console.error('Admin clients error:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to load clients'
+    });
+  }
+});
+
 /* =========================
 LOGOUT
 ========================= */
