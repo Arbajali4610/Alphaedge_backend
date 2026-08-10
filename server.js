@@ -177,7 +177,109 @@ const INSTRUMENTS = {
   axisbank: 'NSE_EQ|INE238A01034',
   kotakbank: 'NSE_EQ|INE237A01036'
 };
-const INSTRUMENT_NAMES = Object.fromEntries(Object.entries(INSTRUMENTS).map(([name,key]) => [key,name]));
+
+// Frontend exposes a broader equity list than the original 12-instrument feed.
+// Keep the frontend unchanged and resolve these NSE symbols to their current
+// Upstox instrument keys at startup from Upstox's official instrument master.
+const MARKET_SYMBOLS = [
+  'ADANIENT', 'ADANIPORTS', 'APOLLOHOSP', 'ASIANPAINT', 'AUBANK', 'AXISBANK',
+  'BAJAJ-AUTO', 'BAJFINANCE', 'BAJAJFINSV', 'BANKBARODA', 'BEL', 'BHARTIARTL',
+  'BRITANNIA', 'CANBK', 'CIPLA', 'COALINDIA', 'DIVISLAB', 'DRREDDY',
+  'EICHERMOT', 'ETERNAL', 'FEDERALBNK', 'GRASIM', 'HCLTECH', 'HDFCBANK',
+  'HDFCLIFE', 'HEROMOTOCO', 'HINDALCO', 'HINDUNILVR', 'ICICIBANK',
+  'IDFCFIRSTB', 'INDUSINDBK', 'INFY', 'IOC', 'ITC', 'JIOFIN', 'JSWSTEEL',
+  'KOTAKBANK', 'LT', 'M&M', 'MARUTI', 'MOTHERSON', 'NESTLEIND', 'NTPC',
+  'ONGC', 'POWERGRID', 'RELIANCE', 'SBILIFE', 'SBIN', 'SHRIRAMFIN',
+  'SUNPHARMA', 'TATACONSUM', 'TATAMOTORS', 'TATASTEEL', 'TECHM', 'TITAN',
+  'TRENT', 'ULTRACEMCO', 'WIPRO', 'INFY', 'HINDPETRO', 'BPCL', 'PIDILITIND',
+  'SIEMENS', 'TATAELXSI', 'DABUR', 'INDIGO', 'AMBUJACEM'
+];
+
+const SYMBOL_TO_NAME = {
+  ADANIENT: 'adani enterprises', ADANIPORTS: 'adani ports & sez', APOLLOHOSP: 'apollo hospitals',
+  ASIANPAINT: 'asian paints', AUBANK: 'au small finance bank', AXISBANK: 'axis bank',
+  'BAJAJ-AUTO': 'bajaj auto', BAJFINANCE: 'bajaj finance', BAJAJFINSV: 'bajaj finserv',
+  BANKBARODA: 'bank of baroda', BEL: 'bharat electronics', BHARTIARTL: 'bharti airtel',
+  BRITANNIA: 'britannia industries', CANBK: 'canara bank', CIPLA: 'cipla', COALINDIA: 'coal india',
+  DIVISLAB: 'divi\'s laboratories', DRREDDY: 'dr. reddy\'s laboratories', EICHERMOT: 'eicher motors',
+  ETERNAL: 'eternal', FEDERALBNK: 'federal bank', GRASIM: 'grasim industries', HCLTECH: 'hcl technologies',
+  HDFCBANK: 'hdfc bank', HDFCLIFE: 'hdfc life insurance', HEROMOTOCO: 'hero motocorp',
+  HINDALCO: 'hindalco industries', HINDUNILVR: 'hindustan unilever', ICICIBANK: 'icici bank',
+  IDFCFIRSTB: 'idfc first bank', INDUSINDBK: 'indusind bank', INFY: 'infosys', IOC: 'indian oil corporation',
+  ITC: 'itc', JIOFIN: 'jio financial services', JSWSTEEL: 'jsw steel', KOTAKBANK: 'kotak mahindra bank',
+  LT: 'larsen & toubro', 'M&M': 'mahindra & mahindra', MARUTI: 'maruti suzuki india', MOTHERSON: 'samvardhana motherson',
+  NESTLEIND: 'nestle india', NTPC: 'ntpc', ONGC: 'ongc', POWERGRID: 'power grid corp', RELIANCE: 'reliance industries',
+  SBILIFE: 'sbi life insurance', SBIN: 'state bank of india', SHRIRAMFIN: 'shriram finance', SUNPHARMA: 'sun pharma',
+  TATACONSUM: 'tata consumer products', TATAMOTORS: 'tata motors', TATASTEEL: 'tata steel', TECHM: 'tech mahindra',
+  TITAN: 'titan company', TRENT: 'trent', ULTRACEMCO: 'ultratech cement', WIPRO: 'wipro', HINDPETRO: 'hindustan petroleum',
+  BPCL: 'bharat petroleum', PIDILITIND: 'pidilite industries', SIEMENS: 'siemens', TATAELXSI: 'tata elxsi',
+  DABUR: 'dabur india', INDIGO: 'interglobe aviation', AMBUJACEM: 'ambuja cements'
+};
+
+for (const symbol of MARKET_SYMBOLS) {
+  const key = symbol.toLowerCase();
+  if (!INSTRUMENTS[key]) INSTRUMENTS[key] = null;
+}
+
+let INSTRUMENT_NAMES = Object.fromEntries(
+  Object.entries(INSTRUMENTS)
+    .filter(([, key]) => key)
+    .map(([name, key]) => [key, name])
+);
+
+async function resolveMarketInstruments() {
+  if (!ACCESS_TOKEN) return;
+
+  try {
+    const response = await fetch(
+      'https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz'
+    );
+    if (!response.ok) throw new Error(`Instrument master download failed: ${response.status}`);
+
+    const { gunzipSync } = require('zlib');
+    const raw = Buffer.from(await response.arrayBuffer());
+    const instruments = JSON.parse(gunzipSync(raw).toString('utf8'));
+    const bySymbol = new Map();
+
+    for (const item of instruments) {
+      if (item?.segment !== 'NSE_EQ' || item?.instrument_type !== 'EQ') continue;
+      const symbol = String(item.trading_symbol || '').toUpperCase();
+      if (symbol && !bySymbol.has(symbol)) bySymbol.set(symbol, item.instrument_key);
+    }
+
+    for (const symbol of MARKET_SYMBOLS) {
+      const key = symbol.toLowerCase();
+      const instrumentKey = bySymbol.get(symbol.toUpperCase());
+      if (instrumentKey) INSTRUMENTS[key] = instrumentKey;
+    }
+
+    INSTRUMENT_NAMES = Object.fromEntries(
+      Object.entries(INSTRUMENTS)
+        .filter(([, key]) => key)
+        .map(([name, key]) => [key, name])
+    );
+    rebuildInstrumentAliases();
+
+    console.log(`Resolved ${Object.keys(INSTRUMENT_NAMES).length} market instruments from Upstox master.`);
+  } catch (err) {
+    console.error('Upstox instrument master resolution failed:', err.message);
+  }
+}
+
+const INSTRUMENT_ALIASES = new Map();
+
+function rebuildInstrumentAliases() {
+  INSTRUMENT_ALIASES.clear();
+  for (const [name, key] of Object.entries(INSTRUMENTS)) {
+    if (!key) continue;
+    const names = INSTRUMENT_ALIASES.get(key) || [];
+    names.push(name);
+    INSTRUMENT_ALIASES.set(key, names);
+  }
+}
+
+rebuildInstrumentAliases();
+
 
 let latest = {
   ...Object.fromEntries(Object.keys(INSTRUMENTS).map(name => [name, null])),
@@ -385,6 +487,30 @@ function extractLtpc(feed) {
   return null;
 }
 
+function updateLatestForInstrument(key, ltpc) {
+  if (!ltpc || typeof ltpc.ltp !== 'number') return;
+
+  const previousClose = Number(ltpc.cp);
+  const changePct = Number.isFinite(previousClose) && previousClose !== 0
+    ? ((ltpc.ltp - previousClose) / previousClose) * 100
+    : null;
+
+  const value = {
+    ltp: ltpc.ltp,
+    close: Number.isFinite(previousClose) ? previousClose : null,
+    changePct,
+    ltt: ltpc.ltt || null
+  };
+
+  const names = INSTRUMENT_ALIASES.get(key) || (INSTRUMENT_NAMES[key] ? [INSTRUMENT_NAMES[key]] : []);
+  for (const name of names) {
+    latest[name] = { ...value };
+    saveMarketSnapshot(name, latest[name]);
+  }
+  latest.updatedAt = Date.now();
+  latest.error = null;
+}
+
 function applyFeed(message) {
 
   let data = message;
@@ -418,56 +544,8 @@ function applyFeed(message) {
     const [key, feed]
     of Object.entries(feeds)
   ) {
-
-    const name = INSTRUMENT_NAMES[key];
-
-    if (!name) continue;
-
-    const ltpc =
-      extractLtpc(feed);
-
-    if (
-      !ltpc ||
-      typeof ltpc.ltp !== 'number'
-    ) {
-      continue;
-    }
-
-    const previousClose =
-      Number(ltpc.cp);
-
-    const changePct =
-      Number.isFinite(previousClose) &&
-      previousClose !== 0
-        ? (
-            (ltpc.ltp - previousClose) /
-            previousClose
-          ) * 100
-        : null;
-
-    latest[name] = {
-      ltp: ltpc.ltp,
-
-      close:
-        Number.isFinite(previousClose)
-          ? previousClose
-          : null,
-
-      changePct,
-
-      ltt:
-        ltpc.ltt || null
-    };
-
-    latest.updatedAt =
-      Date.now();
-
-    latest.error = null;
-
-    saveMarketSnapshot(
-      name,
-      latest[name]
-    );
+    const ltpc = extractLtpc(feed);
+    updateLatestForInstrument(key, ltpc);
   }
 
   broadcast();
@@ -550,27 +628,7 @@ function startUpstox() {
       if (!feeds || typeof feeds !== 'object') return;
 
       for (const [key, feed] of Object.entries(feeds)) {
-        const name = INSTRUMENT_NAMES[key];
-        if (!name) continue;
-
-        const ltpc = extractLtpc(feed);
-        const ltp = Number(ltpc?.ltp);
-        const previousClose = Number(ltpc?.cp);
-        if (!Number.isFinite(ltp)) continue;
-
-        const changePct = Number.isFinite(previousClose) && previousClose !== 0
-          ? ((ltp - previousClose) / previousClose) * 100
-          : null;
-
-        latest[name] = {
-          ltp,
-          close: Number.isFinite(previousClose) ? previousClose : null,
-          changePct,
-          ltt: ltpc?.ltt || null
-        };
-        latest.updatedAt = Date.now();
-        latest.error = null;
-        saveMarketSnapshot(name, latest[name]);
+        updateLatestForInstrument(key, extractLtpc(feed));
       }
 
       broadcast();
@@ -602,7 +660,7 @@ function startUpstox() {
           method: 'sub',
           data: {
             mode: 'ltpc',
-            instrumentKeys: Object.values(INSTRUMENTS)
+            instrumentKeys: Object.values(INSTRUMENTS).filter(Boolean)
           }
         };
 
@@ -1573,6 +1631,7 @@ app.listen(
 
     await initDatabase();
 
+    await resolveMarketInstruments();
     startUpstox();
   }
 );
