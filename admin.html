@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AlphaEdge Admin — Clients</title>
+<style>
+:root{--bg:#050807;--panel:#0c120f;--panel2:#101914;--line:#1d2c23;--green:#23e38a;--text:#f4f8f5;--muted:#9aaba2;--danger:#ff6577}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#10241a 0,#050807 45%);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+.wrap{max-width:1180px;margin:auto;padding:28px 18px}.brand{font-size:25px;font-weight:800;letter-spacing:.3px;margin-bottom:22px}.brand span{color:var(--green)}
+.card{background:rgba(12,18,15,.94);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 60px #0008;padding:22px}
+.login{max-width:420px;margin:9vh auto}.login h1{margin:0 0 6px}.sub{color:var(--muted);font-size:14px;margin-bottom:20px}
+label{display:block;color:#c7d2cc;font-size:13px;margin:14px 0 7px}input{width:100%;padding:13px 14px;border-radius:10px;border:1px solid #27382e;background:#07100b;color:white;outline:none}input:focus{border-color:var(--green)}
+button{border:0;border-radius:10px;padding:12px 16px;background:var(--green);color:#04100a;font-weight:800;cursor:pointer}.login button{width:100%;margin-top:18px}.error{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.top h1{margin:0;font-size:24px}.actions{display:flex;gap:8px}.secondary{background:#16221b;color:#dce8e1;border:1px solid #2a3b31}
+.hidden{display:none}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:13px}table{width:100%;border-collapse:collapse;min-width:780px}th,td{padding:13px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap}th{background:#0e1712;color:#9fb2a8;font-weight:700;position:sticky;top:0}td{color:#e5ece8}tr:last-child td{border-bottom:0}.status{display:inline-block;padding:5px 9px;border-radius:999px;background:#143624;color:#72f0b0;font-size:11px;font-weight:700}.count{color:var(--muted);font-size:13px;margin:0 0 14px}
+</style>
+</head>
+<body>
+<div id="loginView" class="wrap">
+  <div class="card login">
+    <div class="brand">Alpha<span>Edge</span> Admin</div>
+    <h1>Admin Login</h1>
+    <div class="sub">Secure access to registered client records.</div>
+    <form id="loginForm">
+      <label>Username<input id="username" autocomplete="username" required></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Login</button>
+      <div id="loginError" class="error"></div>
+    </form>
+  </div>
+</div>
+
+<div id="appView" class="wrap hidden">
+  <div class="brand">Alpha<span>Edge</span> Admin</div>
+  <div class="card">
+    <div class="top">
+      <div><h1>Registered Clients</h1><p id="count" class="count">Loading...</p></div>
+      <div class="actions"><button class="secondary" id="refresh">Refresh</button><button class="secondary" id="logout">Logout</button></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Client ID</th><th>Mobile</th><th>Email</th><th>Status</th><th>Registered</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+async function api(url,opt={}){
+  const r=await fetch(url,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});
+  let d={}; try{d=await r.json()}catch(_){}
+  if(!r.ok) throw new Error(d.message||'Request failed');
+  return d;
+}
+async function loadClients(){
+  try{
+    const d=await api('/api/admin/clients');
+    $('count').textContent=`${d.clients.length} registered client${d.clients.length===1?'':'s'}`;
+    $('rows').innerHTML=d.clients.length?d.clients.map(c=>`<tr>
+      <td>${esc(c.name)}</td><td>${esc(c.client_id)}</td><td>${esc(c.phone)}</td>
+      <td>${esc(c.email)}</td><td><span class="status">${esc(c.status)}</span></td>
+      <td>${new Date(c.created_at).toLocaleString()}</td>
+    </tr>`).join(''):'<tr><td colspan="6">No registered clients yet.</td></tr>';
+  }catch(e){
+    $('rows').innerHTML=`<tr><td colspan="6">${esc(e.message)}</td></tr>`;
+  }
+}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function check(){
+  try{await api('/api/admin/me');showApp();loadClients()}catch(_){}
+}
+function showApp(){$('loginView').classList.add('hidden');$('appView').classList.remove('hidden')}
+$('loginForm').onsubmit=async e=>{
+ e.preventDefault();$('loginError').textContent='';
+ try{await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});showApp();loadClients()}
+ catch(e){$('loginError').textContent=e.message}
+};
+$('refresh').onclick=loadClients;
+$('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'})}catch(_){} location.reload()};
+check();
+</script>
+</body>
+</html>
