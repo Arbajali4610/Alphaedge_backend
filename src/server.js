@@ -190,7 +190,7 @@ const MARKET_SYMBOLS = [
   'IDFCFIRSTB', 'INDUSINDBK', 'INFY', 'IOC', 'ITC', 'JIOFIN', 'JSWSTEEL',
   'KOTAKBANK', 'LT', 'M&M', 'MARUTI', 'MOTHERSON', 'NESTLEIND', 'NTPC',
   'ONGC', 'POWERGRID', 'RELIANCE', 'SBILIFE', 'SBIN', 'SHRIRAMFIN',
-  'SUNPHARMA', 'TATACONSUM', 'TATAMOTORS', 'TATASTEEL', 'TECHM', 'TITAN',
+  'SUNPHARMA', 'TATACONSUM', 'TATAMOTORS', 'TMPV', 'TATASTEEL', 'TECHM', 'TITAN',
   'TRENT', 'ULTRACEMCO', 'WIPRO', 'HINDPETRO', 'BPCL', 'PIDILITIND',
   'SIEMENS', 'TATAELXSI', 'DABUR', 'INDIGO', 'AMBUJACEM'
 ];
@@ -210,7 +210,7 @@ const SYMBOL_TO_NAME = {
   LT: 'larsen & toubro', 'M&M': 'mahindra & mahindra', MARUTI: 'maruti suzuki india', MOTHERSON: 'samvardhana motherson',
   NESTLEIND: 'nestle india', NTPC: 'ntpc', ONGC: 'ongc', POWERGRID: 'power grid corp', RELIANCE: 'reliance industries',
   SBILIFE: 'sbi life insurance', SBIN: 'state bank of india', SHRIRAMFIN: 'shriram finance', SUNPHARMA: 'sun pharma',
-  TATACONSUM: 'tata consumer products', TATAMOTORS: 'tata motors', TATASTEEL: 'tata steel', TECHM: 'tech mahindra',
+  TATACONSUM: 'tata consumer products', TATAMOTORS: 'tata motors', TMPV: 'tata motors passenger vehicles', TATASTEEL: 'tata steel', TECHM: 'tech mahindra',
   TITAN: 'titan company', TRENT: 'trent', ULTRACEMCO: 'ultratech cement', WIPRO: 'wipro', HINDPETRO: 'hindustan petroleum',
   BPCL: 'bharat petroleum', PIDILITIND: 'pidilite industries', SIEMENS: 'siemens', TATAELXSI: 'tata elxsi',
   DABUR: 'dabur india', INDIGO: 'interglobe aviation', AMBUJACEM: 'ambuja cements'
@@ -282,9 +282,14 @@ async function resolveMarketInstruments() {
     );
     if (!response.ok) throw new Error(`Instrument master download failed: ${response.status}`);
 
+    // Node's built-in fetch may transparently decompress gzip responses.
+    // Therefore do NOT blindly gunzip the payload; inspect the gzip magic bytes first.
     const { gunzipSync } = require('zlib');
     const raw = Buffer.from(await response.arrayBuffer());
-    const instruments = JSON.parse(gunzipSync(raw).toString('utf8'));
+    const jsonText = raw.length >= 2 && raw[0] === 0x1f && raw[1] === 0x8b
+      ? gunzipSync(raw).toString('utf8')
+      : raw.toString('utf8');
+    const instruments = JSON.parse(jsonText);
     const bySymbol = new Map();
 
     for (const item of instruments) {
@@ -373,9 +378,64 @@ async function saveMarketSnapshot(name, value) {
 
 const clients = new Set();
 
+let quoteRefreshPromise = null;
+let lastQuoteRefreshAt = 0;
+
+async function refreshEquityQuotes(force = false) {
+  if (!ACCESS_TOKEN) return;
+  const now = Date.now();
+  if (!force && now - lastQuoteRefreshAt < 8000) return;
+  if (quoteRefreshPromise) return quoteRefreshPromise;
+
+  const keys = [...new Set(Object.entries(INSTRUMENTS)
+    .filter(([name, key]) => name !== 'nifty' && name !== 'sensex' && name !== 'banknifty' && key)
+    .map(([, key]) => key))];
+  if (!keys.length) return;
+
+  quoteRefreshPromise = (async () => {
+    try {
+      // Upstox Full Market Quotes supports up to 500 instruments per request.
+      const url = `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(keys.join(','))}`;
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${ACCESS_TOKEN}`
+        }
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`Quote refresh failed: ${response.status}`);
+
+      for (const payload of Object.values(body?.data || {})) {
+        const key = payload?.instrument_token;
+        if (!key) continue;
+        const ltp = Number(payload.last_price);
+        const close = Number(payload?.ohlc?.close);
+        if (!Number.isFinite(ltp)) continue;
+        updateLatestForInstrument(key, {
+          ltp,
+          cp: Number.isFinite(close) ? close : null,
+          ltt: Number(payload.last_trade_time) || null
+        });
+      }
+      latest.updatedAt = Date.now();
+      latest.error = null;
+      broadcast();
+      lastQuoteRefreshAt = Date.now();
+    } catch (err) {
+      latest.error = err?.message || 'Unable to refresh market quotes';
+      console.error('Upstox quote refresh:', err.message);
+    } finally {
+      quoteRefreshPromise = null;
+    }
+  })();
+
+  return quoteRefreshPromise;
+}
+
 app.use(express.static(__dirname));
 
-app.get('/api/market', (req, res) => {
+app.get('/api/market', async (req, res) => {
+  await refreshEquityQuotes();
   res.set('Cache-Control', 'no-store');
   res.json(latest);
 });
@@ -440,11 +500,97 @@ app.get('/api/market/history', async (req, res) => {
   }
 });
 
+app.get('/api/market/equity-quotes', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+
+  const requested = String(req.query.symbols || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, 500);
+
+  if (!requested.length) {
+    return res.status(400).json({ success: false, message: 'symbols is required' });
+  }
+
+  const resolved = requested
+    .map(requestedSymbol => ({
+      requestedSymbol,
+      key: resolveMarketKey(requestedSymbol),
+      instrumentKey: resolveMarketKey(requestedSymbol)
+        ? INSTRUMENTS[resolveMarketKey(requestedSymbol)]
+        : null
+    }))
+    .filter(x => x.instrumentKey);
+
+  if (!resolved.length) {
+    return res.json({ success: true, quotes: {} });
+  }
+
+  const quoteUrl =
+    `https://api.upstox.com/v2/market-quote/quotes?instrument_key=${encodeURIComponent(resolved.map(x => x.instrumentKey).join(','))}`;
+
+  try {
+    const response = await fetch(quoteUrl, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error('Equity quote request failed:', response.status, body?.errors || body?.message || '');
+      return res.status(response.status).json({
+        success: false,
+        message: response.status === 401
+          ? 'Upstox access token expired or invalid'
+          : 'Equity market data unavailable'
+      });
+    }
+
+    const byInstrument = body?.data && typeof body.data === 'object' ? body.data : {};
+    const quotes = {};
+
+    for (const item of resolved) {
+      const raw = Object.values(byInstrument).find(q => q?.instrument_token === item.instrumentKey);
+      if (!raw) continue;
+
+      const price = Number(raw.last_price);
+      const close = Number(raw.ohlc?.close);
+      const netChange = Number(raw.net_change);
+      const changePct = Number.isFinite(price) && Number.isFinite(close) && close !== 0
+        ? ((price - close) / close) * 100
+        : (Number.isFinite(netChange) && Number.isFinite(price - netChange) && (price - netChange) !== 0
+          ? (netChange / (price - netChange)) * 100
+          : null);
+
+      quotes[item.requestedSymbol.toUpperCase()] = {
+        price: Number.isFinite(price) ? price : null,
+        close: Number.isFinite(close) ? close : null,
+        changePct: Number.isFinite(changePct) ? changePct : null,
+        netChange: Number.isFinite(netChange) ? netChange : null,
+        provider: 'Upstox'
+      };
+    }
+
+    return res.json({ success: true, quotes });
+  } catch (err) {
+    console.error('Equity quote error:', err.message);
+    return res.status(502).json({ success: false, message: 'Equity market data unavailable' });
+  }
+});
+
 app.get('/api/market/history-v3', async (req, res) => {
   const requestedSymbol = String(req.query.symbol || 'nifty').trim();
   const range = String(req.query.range || '5y').toLowerCase();
   const symbol = resolveMarketKey(requestedSymbol);
-  const instrumentKey = symbol ? INSTRUMENTS[symbol] : null;
+  let instrumentKey = symbol ? INSTRUMENTS[symbol] : null;
+
+  if (symbol && !instrumentKey && ACCESS_TOKEN) {
+    await resolveMarketInstruments();
+    instrumentKey = INSTRUMENTS[symbol] || null;
+  }
   const years = range === '1y' ? 1 : range === '3y' ? 3 : range === '5y' ? 5 : null;
 
   if (!instrumentKey || !years) {
@@ -1750,6 +1896,7 @@ app.listen(
     await initDatabase();
 
     await resolveMarketInstruments();
+    await refreshEquityQuotes(true);
     startUpstox();
   }
 );
