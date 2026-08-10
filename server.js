@@ -15,8 +15,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 app.set('trust proxy', 1);
 
-app.use(express.json({ limit: '100kb' }));
-app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const configured = process.env.FRONTEND_ORIGIN;
