@@ -309,7 +309,17 @@ async function resolveMarketInstruments() {
 
     for (const symbol of MARKET_SYMBOLS) {
       const key = symbol.toLowerCase();
-      const instrumentKey = bySymbol.get(normalizeLookup(symbol)) || bySymbol.get(normalizeLookup(SYMBOL_TO_NAME[symbol] || ''));
+      const candidates = [
+        symbol,
+        SYMBOL_TO_NAME[symbol] || '',
+        symbol === 'M&M' ? 'MAHINDRA & MAHINDRA' : '',
+        symbol === 'TMPV' ? 'TATA MOTORS PASSENGER VEHICLES' : '',
+        symbol === 'INDIGO' ? 'INTERGLOBE AVIATION' : ''
+      ];
+      const instrumentKey = candidates
+        .map(normalizeLookup)
+        .map(v => bySymbol.get(v))
+        .find(Boolean);
       if (instrumentKey) INSTRUMENTS[key] = instrumentKey;
     }
 
@@ -502,6 +512,15 @@ app.get('/api/market/history', async (req, res) => {
 
 app.get('/api/market/equity-quotes', async (req, res) => {
   res.set('Cache-Control', 'no-store');
+
+  if (!ACCESS_TOKEN) {
+    return res.status(503).json({ success: false, message: 'Live market data is not configured' });
+  }
+
+  // Ensure the complete current Upstox instrument mapping is available before
+  // resolving the requested symbols. This does not alter the UI or company list.
+  const unresolved = MARKET_SYMBOLS.some(symbol => !INSTRUMENTS[symbol.toLowerCase()]);
+  if (unresolved) await resolveMarketInstruments();
 
   const requested = String(req.query.symbols || '')
     .split(',')
