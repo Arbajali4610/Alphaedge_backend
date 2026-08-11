@@ -617,6 +617,7 @@ app.get('/api/market/equity-quotes', async (req, res) => {
 app.get('/api/market/history-v3', async (req, res) => {
   const requestedSymbol = String(req.query.symbol || 'nifty').trim();
   const range = String(req.query.range || '5y').toLowerCase();
+  const interval = String(req.query.interval || '').toLowerCase();
   const symbol = resolveMarketKey(requestedSymbol);
   let instrumentKey = symbol ? INSTRUMENTS[symbol] : null;
 
@@ -624,91 +625,99 @@ app.get('/api/market/history-v3', async (req, res) => {
     await resolveMarketInstruments();
     instrumentKey = INSTRUMENTS[symbol] || null;
   }
-  const years = range === '1y' ? 1 : range === '3y' ? 3 : range === '5y' ? 5 : null;
 
-  if (!instrumentKey || !years) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid chart symbol or range'
-    });
+  if (!instrumentKey) {
+    return res.status(400).json({ success:false, message:'Invalid chart symbol' });
+  }
+  if (!ACCESS_TOKEN) {
+    return res.status(503).json({ success:false, message:'Live market data is not configured' });
   }
 
-  if (!ACCESS_TOKEN) {
-    return res.status(503).json({
-      success: false,
-      message: 'Live market data is not configured'
-    });
+  // Range buttons control the visible period. Interval controls candle granularity.
+  // Upstox V3 supports minutes (1-300), hours (1-5), days, weeks and months.
+  // For long ranges we intentionally use daily/weekly/monthly candles so the
+  // response stays practical; short ranges can use 1m/5m/15m/30m/1h candles.
+  const now = new Date();
+  const toDate = now.toISOString().slice(0,10);
+  let unit, candleInterval, from;
+
+  const daysBack = (n) => { const d=new Date(now); d.setUTCDate(d.getUTCDate()-n); return d; };
+  const monthsBack = (n) => { const d=new Date(now); d.setUTCMonth(d.getUTCMonth()-n); return d; };
+  const yearsBack = (n) => { const d=new Date(now); d.setUTCFullYear(d.getUTCFullYear()-n); return d; };
+
+  if (range === '1d') {
+    // Current trading day: intraday endpoint gives the freshest candles.
+    unit = 'minutes';
+    candleInterval = ['1','5','15','30'].includes(interval) ? interval : '1';
+  } else if (range === '1w') {
+    from = daysBack(7);
+    if (['1','5','15','30'].includes(interval)) { unit='minutes'; candleInterval=interval; }
+    else if (interval === '60') { unit='hours'; candleInterval='1'; }
+    else { unit='days'; candleInterval='1'; }
+  } else if (range === '1m') {
+    from = monthsBack(1);
+    if (['1','5','15'].includes(interval)) { unit='minutes'; candleInterval=interval; }
+    else if (interval === '30') { unit='minutes'; candleInterval='30'; }
+    else if (interval === '60') { unit='hours'; candleInterval='1'; }
+    else { unit='days'; candleInterval='1'; }
+  } else if (range === '3m') {
+    from = monthsBack(3);
+    if (interval === '30') { unit='minutes'; candleInterval='30'; }
+    else if (interval === '60') { unit='hours'; candleInterval='1'; }
+    else { unit='days'; candleInterval='1'; }
+  } else if (range === '6m') {
+    from = monthsBack(6); unit='days'; candleInterval='1';
+  } else if (range === '1y') {
+    from = yearsBack(1); unit='days'; candleInterval='1';
+  } else if (range === '5y') {
+    // Five years exceeds the practical daily-candle retrieval window for a single request.
+    // Upstox V3 documents weekly/monthly candles for long ranges, so use weekly candles here.
+    from = yearsBack(5); unit='weeks'; candleInterval='1';
+  } else {
+    return res.status(400).json({success:false,message:'Invalid chart range'});
   }
 
   try {
-    const now = new Date();
-    const toDate = now.toISOString().slice(0, 10);
-    const from = new Date(now);
-    from.setUTCFullYear(from.getUTCFullYear() - years);
-    const fromDate = from.toISOString().slice(0, 10);
-
-    const url =
-      `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/${toDate}/${fromDate}`;
+    let url;
+    if (range === '1d') {
+      url = `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/${unit}/${candleInterval}`;
+    } else {
+      const fromDate = from.toISOString().slice(0,10);
+      url = `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/${unit}/${candleInterval}/${toDate}/${fromDate}`;
+    }
 
     const response = await fetch(url, {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${ACCESS_TOKEN}`
-      }
+      headers: { Accept:'application/json', Authorization:`Bearer ${ACCESS_TOKEN}` }
     });
-
-    const body = await response.json().catch(() => ({}));
-
+    const body = await response.json().catch(()=>({}));
     if (!response.ok) {
-      console.error(
-        `Historical data failed for ${requestedSymbol} (${instrumentKey}):`,
-        response.status,
-        body?.errors || body?.message || ''
-      );
-
+      console.error(`Historical data failed for ${requestedSymbol}:`, response.status, body?.errors || body?.message || '');
       return res.status(response.status).json({
-        success: false,
-        message:
-          response.status === 401
-            ? 'Upstox access token expired or invalid'
-            : 'Historical market data unavailable'
+        success:false,
+        message: response.status===401 ? 'Upstox access token expired or invalid' : 'Historical market data unavailable'
       });
     }
 
-    const candles = Array.isArray(body?.data?.candles)
-      ? body.data.candles
-      : [];
+    const candles = Array.isArray(body?.data?.candles) ? body.data.candles : [];
+    const history = candles.map(c => ({
+      date:c[0], open:Number(c[1]), high:Number(c[2]), low:Number(c[3]),
+      close:Number(c[4]), volume:Number(c[5])
+    })).filter(c=>Number.isFinite(c.close)).reverse();
 
-    const history = candles
-      .map((c) => ({
-        date: c[0],
-        open: Number(c[1]),
-        high: Number(c[2]),
-        low: Number(c[3]),
-        close: Number(c[4]),
-        volume: Number(c[5])
-      }))
-      .filter((c) => Number.isFinite(c.close))
-      .reverse();
-
-    res.set('Cache-Control', 'no-store');
-
+    res.set('Cache-Control','no-store');
     return res.json({
-      success: true,
-      symbol: SYMBOL_KEY_TO_SYMBOL.get(symbol) || symbol,
+      success:true,
+      symbol:SYMBOL_KEY_TO_SYMBOL.get(symbol)||symbol,
       range,
+      interval: interval || (range==='1d'?'1':'1D'),
+      unit,
       history
     });
-  } catch (err) {
-    console.error('Historical market data error:', err.message);
-
-    return res.status(502).json({
-      success: false,
-      message: 'Historical market data unavailable'
-    });
+  } catch(err) {
+    console.error('Historical market data error:',err.message);
+    return res.status(502).json({success:false,message:'Historical market data unavailable'});
   }
 });
-
 
 app.get('/api/market-stream', (req, res) => {
 
