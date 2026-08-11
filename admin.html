@@ -45,6 +45,41 @@ button{border:0;border-radius:10px;padding:12px 16px;background:var(--green);col
       </table>
     </div>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="top">
+      <div><h1>Wallet Management</h1><p class="count">Internal AlphaEdge platform credits</p></div>
+      <button class="secondary" id="refreshWallets">Refresh</button>
+    </div>
+    <form id="walletForm" style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1.5fr auto;gap:8px;align-items:end">
+      <div><label>Client ID<input id="walletClientId" placeholder="AE100001" required></label></div>
+      <div><label>Type<select id="walletType" style="width:100%;padding:13px 14px;border-radius:10px;border:1px solid #27382e;background:#07100b;color:white"><option value="credit">Credit</option><option value="debit">Debit</option></select></label></div>
+      <div><label>Amount<input id="walletAmount" type="number" min="0.01" step="0.01" required></label></div>
+      <div><label>Description<input id="walletDescription" placeholder="Reason / course credit"></label></div>
+      <button type="submit">Apply</button>
+    </form>
+    <div id="walletError" class="error"></div>
+    <div id="walletCount" class="count">Loading...</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Client ID</th><th>Name</th><th>Mobile</th><th>Email</th><th>Wallet Balance</th><th>Updated</th></tr></thead>
+        <tbody id="walletRows"><tr><td colspan="6">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="top">
+      <div><h1>Wallet Top-up Requests</h1><p id="topupCount" class="count">Loading...</p></div>
+      <button class="secondary" id="refreshTopups">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Client</th><th>Mobile</th><th>Amount</th><th>UTR</th><th>Status</th><th>Submitted</th><th>Action</th></tr></thead>
+        <tbody id="topupRows"><tr><td colspan="8">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -69,10 +104,101 @@ async function loadClients(){
   }
 }
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+
+async function loadWallets(){
+  try{
+    const d=await api('/api/admin/wallets');
+    $('walletCount').textContent=`${d.wallets.length} client wallet${d.wallets.length===1?'':'s'}`;
+    $('walletRows').innerHTML=d.wallets.length?d.wallets.map(w=>`<tr>
+      <td>${esc(w.client_id)}</td><td>${esc(w.name)}</td><td>${esc(w.phone)}</td>
+      <td>${esc(w.email)}</td><td>₹${Number(w.balance||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td>${new Date(w.updated_at).toLocaleString()}</td>
+    </tr>`).join(''):'<tr><td colspan="6">No wallets yet.</td></tr>';
+  }catch(e){
+    $('walletRows').innerHTML=`<tr><td colspan="6">${esc(e.message)}</td></tr>`;
+  }
+}
+$('refreshWallets').onclick=loadWallets;
+$('walletForm').onsubmit=async e=>{
+  e.preventDefault();
+  $('walletError').textContent='';
+  try{
+    const d=await api('/api/admin/wallet/adjust',{
+      method:'POST',
+      body:JSON.stringify({
+        clientId:$('walletClientId').value.trim().toUpperCase(),
+        type:$('walletType').value,
+        amount:Number($('walletAmount').value),
+        description:$('walletDescription').value.trim()
+      })
+    });
+    $('walletError').style.color='var(--green)';
+    $('walletError').textContent=`Success. New balance: ₹${Number(d.balance).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    $('walletForm').reset();
+    loadWallets();
+  }catch(e){
+    $('walletError').style.color='var(--danger)';
+    $('walletError').textContent=e.message;
+  }
+};
+
+async function loadTopups(){
+  try{
+    const d=await api('/api/admin/wallet/topups');
+    const requests=Array.isArray(d.requests)?d.requests:[];
+    const pending=requests.filter(x=>x.status==='pending').length;
+    $('topupCount').textContent=`${pending} pending • ${requests.length} total request${requests.length===1?'':'s'}`;
+    $('topupRows').innerHTML=requests.length?requests.map(x=>{
+      const status=esc(x.status);
+      const action=x.status==='pending'
+        ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
+             <button type="button" onclick="approveTopup(${Number(x.id)})">Approve</button>
+             <button type="button" class="secondary" onclick="rejectTopup(${Number(x.id)})">Reject</button>
+           </div>`
+        : `<span class="status">${status}</span>`;
+      return `<tr>
+        <td>${Number(x.id)}</td>
+        <td>${esc(x.client_id)}<br><small>${esc(x.name)}</small></td>
+        <td>${esc(x.phone)}</td>
+        <td>₹${Number(x.amount||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td>${esc(x.utr)}</td>
+        <td>${status}</td>
+        <td>${new Date(x.created_at).toLocaleString()}</td>
+        <td>${action}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="8">No top-up requests.</td></tr>';
+  }catch(e){
+    $('topupRows').innerHTML=`<tr><td colspan="8">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function approveTopup(id){
+  if(!confirm('Approve this payment and credit the wallet?'))return;
+  try{
+    const d=await api(`/api/admin/wallet/topups/${id}/approve`,{method:'POST'});
+    alert(`Approved. ${d.clientId} credited ₹${Number(d.amount).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}. New balance ₹${Number(d.balance).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}.`);
+    loadTopups();
+    loadWallets();
+  }catch(e){alert(e.message)}
+}
+
+async function rejectTopup(id){
+  const note=prompt('Reason for rejection (optional):')||'Payment could not be verified.';
+  try{
+    await api(`/api/admin/wallet/topups/${id}/reject`,{
+      method:'POST',
+      body:JSON.stringify({note})
+    });
+    loadTopups();
+  }catch(e){alert(e.message)}
+}
+
+$('refreshTopups').onclick=loadTopups;
+
 async function check(){
   try{await api('/api/admin/me');showApp();loadClients()}catch(_){}
 }
-function showApp(){$('loginView').classList.add('hidden');$('appView').classList.remove('hidden')}
+function showApp(){$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');loadWallets();loadTopups()}
 $('loginForm').onsubmit=async e=>{
  e.preventDefault();$('loginError').textContent='';
  try{await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:$('username').value,password:$('password').value})});showApp();loadClients()}

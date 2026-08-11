@@ -101,6 +101,53 @@ async function initDatabase() {
         captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS wallets (
+        client_id VARCHAR(30) PRIMARY KEY
+          REFERENCES clients(client_id) ON DELETE CASCADE,
+        balance NUMERIC(14,2) NOT NULL DEFAULT 0
+          CHECK (balance >= 0),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS wallet_transactions (
+        id BIGSERIAL PRIMARY KEY,
+        client_id VARCHAR(30) NOT NULL
+          REFERENCES clients(client_id) ON DELETE CASCADE,
+        type VARCHAR(10) NOT NULL
+          CHECK (type IN ('credit','debit')),
+        amount NUMERIC(14,2) NOT NULL
+          CHECK (amount > 0),
+        description VARCHAR(255) NOT NULL,
+        reference VARCHAR(100),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS wallet_transactions_client_time_idx
+      ON wallet_transactions(client_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS wallet_topup_requests (
+        id BIGSERIAL PRIMARY KEY,
+        client_id VARCHAR(30) NOT NULL
+          REFERENCES clients(client_id) ON DELETE CASCADE,
+        amount NUMERIC(14,2) NOT NULL
+          CHECK (amount > 0),
+        utr VARCHAR(100) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending','approved','rejected')),
+        admin_note VARCHAR(255),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reviewed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS wallet_topup_requests_status_time_idx
+      ON wallet_topup_requests(status, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS wallet_topup_requests_client_time_idx
+      ON wallet_topup_requests(client_id, created_at DESC);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS wallet_topup_requests_utr_unique_idx
+      ON wallet_topup_requests(utr);
+
       CREATE INDEX IF NOT EXISTS market_snapshots_symbol_time_idx
       ON market_snapshots(symbol, captured_at DESC);
     `);
@@ -1228,6 +1275,13 @@ app.post(
         ]
       );
 
+      await pool.query(
+        `INSERT INTO wallets (client_id)
+         VALUES ($1)
+         ON CONFLICT (client_id) DO NOTHING`,
+        [clientId]
+      );
+
       return res.status(201).json({
         success: true,
         message:
@@ -1753,6 +1807,265 @@ app.put(
   }
 );
 
+
+/* =========================
+WALLET — INTERNAL PLATFORM CREDITS
+========================= */
+
+async function ensureWallet(clientId) {
+  await pool.query(
+    `INSERT INTO wallets (client_id)
+     VALUES ($1)
+     ON CONFLICT (client_id) DO NOTHING`,
+    [clientId]
+  );
+}
+
+app.get('/api/wallet', requireLogin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database unavailable'
+    });
+  }
+
+  try {
+    const clientId = req.session.clientId;
+    await ensureWallet(clientId);
+
+    const walletResult = await pool.query(
+      `SELECT balance, updated_at
+       FROM wallets
+       WHERE client_id = $1`,
+      [clientId]
+    );
+
+    const txResult = await pool.query(
+      `SELECT id, type, amount, description, reference, created_at
+       FROM wallet_transactions
+       WHERE client_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [clientId]
+    );
+
+    return res.json({
+      success: true,
+      wallet: {
+        balance: Number(walletResult.rows[0]?.balance || 0),
+        updatedAt: walletResult.rows[0]?.updated_at || null
+      },
+      transactions: txResult.rows.map(row => ({
+        id: row.id,
+        type: row.type,
+        amount: Number(row.amount),
+        description: row.description,
+        reference: row.reference,
+        createdAt: row.created_at
+      }))
+    });
+  } catch (err) {
+    console.error('Wallet load error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load wallet'
+    });
+  }
+});
+
+
+app.post('/api/wallet/topup-request', requireLogin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
+
+  const amount = Number(req.body.amount);
+  const utr = String(req.body.utr || '').trim();
+
+  if (!Number.isFinite(amount) || amount < 1 || amount > 1000000) {
+    return res.status(400).json({
+      success: false,
+      message: 'Enter an amount between ₹1 and ₹10,00,000.'
+    });
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._\/-]{3,99}$/.test(utr)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Enter a valid UTR / transaction ID.'
+    });
+  }
+
+  try {
+    const existing = await pool.query(
+      `SELECT id, status FROM wallet_topup_requests WHERE utr = $1`,
+      [utr]
+    );
+
+    if (existing.rows.length) {
+      return res.status(409).json({
+        success: false,
+        message: `This UTR has already been submitted (${existing.rows[0].status}).`
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO wallet_topup_requests (client_id, amount, utr)
+       VALUES ($1, $2, $3)
+       RETURNING id, amount, utr, status, created_at`,
+      [req.session.clientId, amount, utr]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Top-up request submitted. Wallet will be credited after admin verification.',
+      request: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Wallet top-up request error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to submit top-up request'
+    });
+  }
+});
+
+app.get('/api/wallet/topup-requests', requireLogin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, amount, utr, status, admin_note, created_at, reviewed_at
+       FROM wallet_topup_requests
+       WHERE client_id = $1
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.session.clientId]
+    );
+
+    return res.json({
+      success: true,
+      requests: result.rows.map(row => ({
+        id: row.id,
+        amount: Number(row.amount),
+        utr: row.utr,
+        status: row.status,
+        adminNote: row.admin_note,
+        createdAt: row.created_at,
+        reviewedAt: row.reviewed_at
+      }))
+    });
+  } catch (err) {
+    console.error('Wallet top-up list error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load top-up requests'
+    });
+  }
+});
+
+app.post('/api/wallet/course-payment', requireLogin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database unavailable'
+    });
+  }
+
+  const course = String(req.body.course || '').trim();
+  const amount = Number(req.body.amount);
+
+  if (!course || !Number.isFinite(amount) || amount <= 0 || amount > 100000) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid course or amount'
+    });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const walletResult = await client.query(
+      `SELECT balance
+       FROM wallets
+       WHERE client_id = $1
+       FOR UPDATE`,
+      [req.session.clientId]
+    );
+
+    if (!walletResult.rows.length) {
+      await client.query(
+        `INSERT INTO wallets (client_id)
+         VALUES ($1)`,
+        [req.session.clientId]
+      );
+    }
+
+    const balanceResult = await client.query(
+      `SELECT balance
+       FROM wallets
+       WHERE client_id = $1
+       FOR UPDATE`,
+      [req.session.clientId]
+    );
+
+    const balance = Number(balanceResult.rows[0].balance);
+
+    if (balance < amount) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient wallet credits. Available: ₹${balance.toFixed(2)}`
+      });
+    }
+
+    const newBalance = balance - amount;
+
+    await client.query(
+      `UPDATE wallets
+       SET balance = $1, updated_at = NOW()
+       WHERE client_id = $2`,
+      [newBalance, req.session.clientId]
+    );
+
+    const tx = await client.query(
+      `INSERT INTO wallet_transactions
+       (client_id, type, amount, description, reference)
+       VALUES ($1, 'debit', $2, $3, $4)
+       RETURNING id, created_at`,
+      [
+        req.session.clientId,
+        amount,
+        `Course purchase: ${course}`,
+        `COURSE-${Date.now()}`
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return res.status(201).json({
+      success: true,
+      message: 'Course payment completed from wallet',
+      balance: newBalance,
+      transactionId: tx.rows[0].id,
+      createdAt: tx.rows[0].created_at
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('Wallet course payment error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Wallet payment failed'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 /* =========================
 PAYMENT CONFIRMATION
 ========================= */
@@ -1953,6 +2266,344 @@ app.get('/api/admin/clients', requireAdmin, async (req, res) => {
   }
 });
 
+
+/* =========================
+ADMIN WALLET MANAGEMENT
+========================= */
+
+app.get('/api/admin/wallets', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database unavailable'
+    });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.client_id,
+        c.name,
+        c.phone,
+        c.email,
+        COALESCE(w.balance, 0) AS balance,
+        COALESCE(w.updated_at, c.created_at) AS wallet_updated_at
+      FROM clients c
+      LEFT JOIN wallets w ON w.client_id = c.client_id
+      ORDER BY c.created_at DESC
+    `);
+
+    return res.json({
+      success: true,
+      wallets: result.rows.map(row => ({
+        client_id: row.client_id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        balance: Number(row.balance),
+        updated_at: row.wallet_updated_at
+      }))
+    });
+  } catch (err) {
+    console.error('Admin wallets error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load wallets'
+    });
+  }
+});
+
+
+app.get('/api/admin/wallet/topups', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.client_id, c.name, c.phone, c.email,
+              t.amount, t.utr, t.status, t.admin_note, t.created_at, t.reviewed_at
+       FROM wallet_topup_requests t
+       JOIN clients c ON c.client_id = t.client_id
+       ORDER BY CASE WHEN t.status = 'pending' THEN 0 ELSE 1 END, t.created_at DESC
+       LIMIT 200`
+    );
+
+    return res.json({
+      success: true,
+      requests: result.rows.map(row => ({
+        id: row.id,
+        client_id: row.client_id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        amount: Number(row.amount),
+        utr: row.utr,
+        status: row.status,
+        admin_note: row.admin_note,
+        created_at: row.created_at,
+        reviewed_at: row.reviewed_at
+      }))
+    });
+  } catch (err) {
+    console.error('Admin top-up list error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load top-up requests'
+    });
+  }
+});
+
+app.post('/api/admin/wallet/topups/:id/approve', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ success: false, message: 'Invalid top-up request ID' });
+  }
+
+  const dbClient = await pool.connect();
+
+  try {
+    await dbClient.query('BEGIN');
+
+    const requestResult = await dbClient.query(
+      `SELECT id, client_id, amount, utr, status
+       FROM wallet_topup_requests
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (!requestResult.rows.length) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Top-up request not found' });
+    }
+
+    const request = requestResult.rows[0];
+
+    if (request.status !== 'pending') {
+      await dbClient.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        message: `Request is already ${request.status}.`
+      });
+    }
+
+    await dbClient.query(
+      `INSERT INTO wallets (client_id)
+       VALUES ($1)
+       ON CONFLICT (client_id) DO NOTHING`,
+      [request.client_id]
+    );
+
+    const walletResult = await dbClient.query(
+      `SELECT balance FROM wallets WHERE client_id = $1 FOR UPDATE`,
+      [request.client_id]
+    );
+
+    const oldBalance = Number(walletResult.rows[0].balance);
+    const newBalance = oldBalance + Number(request.amount);
+
+    await dbClient.query(
+      `UPDATE wallets SET balance = $1, updated_at = NOW() WHERE client_id = $2`,
+      [newBalance, request.client_id]
+    );
+
+    await dbClient.query(
+      `INSERT INTO wallet_transactions
+       (client_id, type, amount, description, reference)
+       VALUES ($1, 'credit', $2, $3, $4)`,
+      [
+        request.client_id,
+        request.amount,
+        'Wallet top-up approved',
+        `TOPUP-${request.id}-${request.utr}`
+      ]
+    );
+
+    await dbClient.query(
+      `UPDATE wallet_topup_requests
+       SET status = 'approved', reviewed_at = NOW()
+       WHERE id = $1`,
+      [id]
+    );
+
+    await dbClient.query('COMMIT');
+
+    return res.json({
+      success: true,
+      message: 'Top-up approved and wallet credited.',
+      clientId: request.client_id,
+      amount: Number(request.amount),
+      balance: newBalance
+    });
+  } catch (err) {
+    try { await dbClient.query('ROLLBACK'); } catch (_) {}
+    console.error('Admin top-up approval error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to approve top-up'
+    });
+  } finally {
+    dbClient.release();
+  }
+});
+
+app.post('/api/admin/wallet/topups/:id/reject', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({ success: false, message: 'Database unavailable' });
+  }
+
+  const id = Number(req.params.id);
+  const note = String(req.body.note || '').trim() || 'Payment could not be verified.';
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ success: false, message: 'Invalid top-up request ID' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE wallet_topup_requests
+       SET status = 'rejected', admin_note = $2, reviewed_at = NOW()
+       WHERE id = $1 AND status = 'pending'
+       RETURNING id, status`,
+      [id, note]
+    );
+
+    if (!result.rows.length) {
+      return res.status(409).json({
+        success: false,
+        message: 'Top-up request not found or already reviewed.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Top-up rejected.',
+      request: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Admin top-up rejection error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to reject top-up'
+    });
+  }
+});
+
+app.post('/api/admin/wallet/adjust', requireAdmin, async (req, res) => {
+  if (!pool || !databaseReady) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database unavailable'
+    });
+  }
+
+  const clientId = String(req.body.clientId || '').trim().toUpperCase();
+  const type = String(req.body.type || '').trim().toLowerCase();
+  const amount = Number(req.body.amount);
+  const description = String(req.body.description || '').trim() || 'Admin wallet adjustment';
+  const reference = String(req.body.reference || '').trim() || `ADMIN-${Date.now()}`;
+
+  if (!/^AE\d{6}$/.test(clientId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid Client ID'
+    });
+  }
+
+  if (!['credit', 'debit'].includes(type)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Type must be credit or debit'
+    });
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) {
+    return res.status(400).json({
+      success: false,
+      message: 'Amount must be greater than 0 and at most ₹10,00,000'
+    });
+  }
+
+  const dbClient = await pool.connect();
+
+  try {
+    await dbClient.query('BEGIN');
+
+    const exists = await dbClient.query(
+      `SELECT client_id FROM clients WHERE client_id = $1 FOR UPDATE`,
+      [clientId]
+    );
+
+    if (!exists.rows.length) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Client not found'
+      });
+    }
+
+    await dbClient.query(
+      `INSERT INTO wallets (client_id)
+       VALUES ($1)
+       ON CONFLICT (client_id) DO NOTHING`,
+      [clientId]
+    );
+
+    const wallet = await dbClient.query(
+      `SELECT balance FROM wallets WHERE client_id = $1 FOR UPDATE`,
+      [clientId]
+    );
+
+    const current = Number(wallet.rows[0].balance);
+    const next = type === 'credit' ? current + amount : current - amount;
+
+    if (next < 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient wallet credits. Current balance: ₹${current.toFixed(2)}`
+      });
+    }
+
+    await dbClient.query(
+      `UPDATE wallets
+       SET balance = $1, updated_at = NOW()
+       WHERE client_id = $2`,
+      [next, clientId]
+    );
+
+    const tx = await dbClient.query(
+      `INSERT INTO wallet_transactions
+       (client_id, type, amount, description, reference)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, created_at`,
+      [clientId, type, amount, description, reference]
+    );
+
+    await dbClient.query('COMMIT');
+
+    return res.status(201).json({
+      success: true,
+      balance: next,
+      transactionId: tx.rows[0].id,
+      createdAt: tx.rows[0].created_at
+    });
+  } catch (err) {
+    try { await dbClient.query('ROLLBACK'); } catch (_) {}
+    console.error('Admin wallet adjustment error:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Wallet adjustment failed'
+    });
+  } finally {
+    dbClient.release();
+  }
+});
+
 /* =========================
 LOGOUT
 ========================= */
@@ -1986,6 +2637,32 @@ app.post(
     );
   }
 );
+
+
+/* =========================
+API ERROR SAFETY
+Always return JSON for unknown /api routes and API errors.
+This prevents the frontend from trying to parse an HTML <!DOCTYPE...> page as JSON.
+========================= */
+app.use('/api', (req, res) => {
+  if (res.headersSent) return;
+  return res.status(404).json({
+    success: false,
+    message: `API route not found: ${req.method} ${req.path}`
+  });
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err?.stack || err?.message || err);
+  if (res.headersSent) return next(err);
+  if (req.path.startsWith('/api')) {
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+  return res.status(500).send('Internal server error');
+});
 
 /* =========================
 HEALTH CHECK
