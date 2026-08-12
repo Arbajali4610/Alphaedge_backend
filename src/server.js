@@ -80,19 +80,6 @@ async function initDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
-      CREATE TABLE IF NOT EXISTS payment_confirmations (
-        id BIGSERIAL PRIMARY KEY,
-        client_id VARCHAR(30) NOT NULL
-          REFERENCES clients(client_id) ON DELETE CASCADE,
-        course VARCHAR(120) NOT NULL,
-        amount NUMERIC(10,2) NOT NULL DEFAULT 999.00,
-        utr VARCHAR(100) NOT NULL,
-        slip_name VARCHAR(255),
-        slip_data TEXT,
-        status VARCHAR(20) NOT NULL DEFAULT 'pending',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
       CREATE TABLE IF NOT EXISTS market_snapshots (
         id BIGSERIAL PRIMARY KEY,
         symbol VARCHAR(30) NOT NULL,
@@ -1725,111 +1712,6 @@ app.put(
         success: false,
         message:
           'Profile update failed'
-      });
-    }
-  }
-);
-
-/* =========================
-PAYMENT CONFIRMATION
-========================= */
-
-app.post(
-  '/api/payments/confirm',
-  requireLogin,
-  async (req, res) => {
-
-    if (
-      !pool ||
-      !databaseReady
-    ) {
-
-      return res.status(503).json({
-        success: false,
-        message:
-          'Database unavailable'
-      });
-    }
-
-    try {
-
-      const course =
-        String(
-          req.body.course || ''
-        ).trim();
-
-      const utr =
-        String(
-          req.body.utr || ''
-        ).trim();
-
-      const slipName =
-        String(
-          req.body.slipName || ''
-        ).trim();
-
-      const slipData =
-        String(
-          req.body.slipData || ''
-        );
-
-      if (
-        !course ||
-        !utr ||
-        !slipName ||
-        !slipData
-      ) {
-
-        return res.status(400).json({
-          success: false,
-          message:
-            'Payment details are required'
-        });
-      }
-
-      const result =
-        await pool.query(
-          `INSERT INTO payment_confirmations
-           (
-             client_id,
-             course,
-             amount,
-             utr,
-             slip_name,
-             slip_data
-           )
-           VALUES
-           ($1, $2, 999, $3, $4, $5)
-           RETURNING id, created_at`,
-          [
-            req.session.clientId,
-            course,
-            utr,
-            slipName,
-            slipData
-          ]
-        );
-
-      res.status(201).json({
-        success: true,
-        paymentId:
-          result.rows[0].id,
-
-        createdAt:
-          result.rows[0].created_at
-      });
-
-    } catch (err) {
-
-      console.error(
-        'Payment confirmation error:',
-        err.message
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          'Payment confirmation failed'
       });
     }
   }
