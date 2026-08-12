@@ -9,7 +9,6 @@ Express + SQLite backend for the AlphaEdge frontend.
 - Login/logout using an HTTP-only session cookie.
 - Forgot Client ID / Forgot Password endpoints.
 - Profile update endpoint.
-- Payment confirmation storage, including uploaded slip files.
 - Upstox Market Data Feed V3 bridge to `/api/market` and `/api/market-stream`.
 - Real-time NIFTY 50, SENSEX and BANK NIFTY updates pushed to the existing frontend via Server-Sent Events.
 
@@ -25,4 +24,3 @@ The backend serves the frontend from `../frontend` when this package is run from
 ## Important
 GitHub Pages is static hosting and cannot run this backend. Deploy the backend on a Node-capable service (Render, Railway, VPS, etc.) and point the frontend API URL to that server if frontend/backend are on different domains.
 
-Never commit `.env`, an Upstox secret, access token, client secret, database, or uploaded payment slips to GitHub.
