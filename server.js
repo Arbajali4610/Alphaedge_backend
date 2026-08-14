@@ -1045,20 +1045,58 @@ function generateClientId() {
   return `AE${random}`;
 }
 
+function authTokenSecret(){
+  return process.env.AUTH_TOKEN_SECRET || process.env.SESSION_SECRET || 'CHANGE_THIS_SESSION_SECRET';
+}
+
+function createAuthToken(clientId, provider='social'){
+  const payload = {
+    clientId: String(clientId),
+    provider: String(provider),
+    exp: Math.floor(Date.now()/1000) + 60 * 60 * 24 * 30
+  };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', authTokenSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyAuthToken(token){
+  try{
+    const [body, sig] = String(token||'').split('.');
+    if(!body || !sig) return null;
+    const expected = crypto.createHmac('sha256', authTokenSecret()).update(body).digest('base64url');
+    const a=Buffer.from(sig);
+    const b=Buffer.from(expected);
+    if(a.length!==b.length || !crypto.timingSafeEqual(a,b)) return null;
+    const payload=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));
+    if(!payload?.clientId || Number(payload.exp||0) < Math.floor(Date.now()/1000)) return null;
+    return payload;
+  }catch(_){ return null; }
+}
+
+function getAuthClientId(req){
+  if(req.session?.clientId) return req.session.clientId;
+  const header=String(req.headers.authorization||'');
+  if(/^Bearer\s+/i.test(header)){
+    const payload=verifyAuthToken(header.replace(/^Bearer\s+/i,''));
+    if(payload?.clientId) return payload.clientId;
+  }
+  return null;
+}
+
 function requireLogin(
   req,
   res,
   next
 ) {
-
-  if (!req.session?.clientId) {
-
+  const clientId=getAuthClientId(req);
+  if(!clientId) {
     return res.status(401).json({
       success: false,
       message: 'Login required'
     });
   }
-
+  req.authClientId=clientId;
   next();
 }
 
@@ -1209,7 +1247,7 @@ app.get('/api/auth/truecaller/callback',async(req,res)=>{
     const nextSymbol=String(req.session.oauthNextSymbol||'').trim();
     delete req.session.oauthState; delete req.session.oauthProvider; delete req.session.oauthNextSymbol;
     await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
-    const target=new URL(frontend); target.searchParams.set('social','success'); target.searchParams.set('clientId',client.client_id); if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
+    const target=new URL(frontend); target.searchParams.set('social','success'); target.searchParams.set('clientId',client.client_id); target.searchParams.set('authToken',createAuthToken(client.client_id,'truecaller')); if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
     return res.redirect(target.toString());
   }catch(err){
     console.error('truecaller OAuth error:',err.message);
@@ -1369,6 +1407,7 @@ app.get('/api/auth/:provider/callback', async (req,res)=>{
     const target=new URL(frontend);
     target.searchParams.set('social','success');
     target.searchParams.set('clientId',client.client_id);
+    target.searchParams.set('authToken',createAuthToken(client.client_id,provider));
     if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
     return res.redirect(target.toString());
   }catch(err){
@@ -1878,7 +1917,7 @@ app.get(
            WHERE client_id = $1
            LIMIT 1`,
           [
-            req.session.clientId
+            req.authClientId || req.session.clientId
           ]
         );
 
