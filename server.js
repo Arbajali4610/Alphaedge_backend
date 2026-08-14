@@ -72,12 +72,24 @@ async function initDatabase() {
         id BIGSERIAL PRIMARY KEY,
         client_id VARCHAR(30) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
-        phone VARCHAR(20) UNIQUE NOT NULL,
+        phone VARCHAR(20) UNIQUE,
         email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
+        password_hash TEXT,
         status VARCHAR(20) NOT NULL DEFAULT 'active',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_otps (
+        id BIGSERIAL PRIMARY KEY,
+        phone VARCHAR(30) NOT NULL,
+        otp_hash TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS whatsapp_otps_phone_idx
+      ON whatsapp_otps(phone, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS market_snapshots (
         id BIGSERIAL PRIMARY KEY,
@@ -92,6 +104,8 @@ async function initDatabase() {
       ON market_snapshots(symbol, captured_at DESC);
     `);
 
+    await pool.query(`ALTER TABLE clients ALTER COLUMN phone DROP NOT NULL`);
+    await pool.query(`ALTER TABLE clients ALTER COLUMN password_hash DROP NOT NULL`);
     databaseReady = true;
     console.log('PostgreSQL database ready.');
 
@@ -1047,6 +1061,324 @@ function requireLogin(
 
   next();
 }
+
+/* =========================
+WHATSAPP OTP LOGIN
+========================= */
+
+function normalizedWhatsappPhone(value){
+  let p=String(value||'').replace(/[^\d+]/g,'');
+  if(p.startsWith('00')) p='+'+p.slice(2);
+  if(!p.startsWith('+')) p='+'+p;
+  return p;
+}
+
+async function createOrGetPhoneClient(phone, name='AlphaEdge User'){
+  if(!pool || !databaseReady) throw new Error('Authentication database is unavailable');
+  const result=await pool.query(`SELECT id,client_id,name,phone,email,status FROM clients WHERE phone=$1 LIMIT 1`,[phone]);
+  let client=result.rows[0];
+  if(client && client.status!=='active') throw new Error('Account is not active.');
+  if(!client){
+    let clientId=null;
+    for(let i=0;i<20;i++){
+      const candidate=generateClientId();
+      const check=await pool.query(`SELECT 1 FROM clients WHERE client_id=$1`,[candidate]);
+      if(!check.rows.length){clientId=candidate;break;}
+    }
+    if(!clientId) throw new Error('Unable to create Client ID.');
+    // WhatsApp/Truecaller may not provide an email. Keep a private internal
+    // placeholder so the existing email-unique schema remains compatible.
+    const internalEmail=`phone_${phone.replace(/\D/g,'')}@alphaedge.local`;
+    const created=await pool.query(
+      `INSERT INTO clients(client_id,name,phone,email,password_hash,status)\n       VALUES($1,$2,$3,$4,NULL,'active')\n       RETURNING id,client_id,name,phone,email,status`,
+      [clientId,String(name||'AlphaEdge User').slice(0,100),phone,internalEmail]
+    );
+    client=created.rows[0];
+  }
+  return client;
+}
+
+app.post('/api/auth/whatsapp/request', async (req,res)=>{
+  try{
+    if(!pool || !databaseReady) return res.status(503).json({success:false,message:'Authentication database is unavailable.'});
+    const token=process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId=process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const templateName=process.env.WHATSAPP_OTP_TEMPLATE_NAME;
+    const language=process.env.WHATSAPP_OTP_LANGUAGE||'en_US';
+    if(!token || !phoneNumberId || !templateName){
+      return res.status(503).json({success:false,message:'WhatsApp OTP is not configured on the server.'});
+    }
+    const phone=normalizedWhatsappPhone(req.body.phone);
+    if(!/^\+[1-9]\d{7,14}$/.test(phone)) return res.status(400).json({success:false,message:'Enter a valid WhatsApp number with country code.'});
+    const otp=String(crypto.randomInt(100000,1000000));
+    const otpHash=crypto.createHash('sha256').update(otp).digest('hex');
+    await pool.query(`DELETE FROM whatsapp_otps WHERE phone=$1 OR expires_at<NOW()`,[phone]);
+    await pool.query(`INSERT INTO whatsapp_otps(phone,otp_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '5 minutes')`,[phone,otpHash]);
+
+    const version=process.env.WHATSAPP_GRAPH_VERSION||'v24.0';
+    const url=`https://graph.facebook.com/${version}/${phoneNumberId}/messages`;
+    const body={
+      messaging_product:'whatsapp',to:phone.replace(/^\+/,''),type:'template',
+      template:{name:templateName,language:{code:language},components:[{type:'body',parameters:[{type:'text',text:otp}]}]}
+    };
+    const r=await fetch(url,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok){
+      await pool.query(`DELETE FROM whatsapp_otps WHERE phone=$1`,[phone]);
+      console.error('WhatsApp API error:',data);
+      return res.status(502).json({success:false,message:'WhatsApp could not send the OTP. Check your Meta WhatsApp configuration.'});
+    }
+    req.session.whatsappPendingPhone=phone;
+    return res.json({success:true,message:'OTP sent on WhatsApp.'});
+  }catch(err){
+    console.error('WhatsApp OTP request error:',err.message);
+    return res.status(500).json({success:false,message:'Unable to start WhatsApp login.'});
+  }
+});
+
+app.post('/api/auth/whatsapp/verify', async (req,res)=>{
+  try{
+    if(!pool || !databaseReady) return res.status(503).json({success:false,message:'Authentication database is unavailable.'});
+    const phone=normalizedWhatsappPhone(req.body.phone);
+    const otp=String(req.body.otp||'').trim();
+    if(phone!==req.session.whatsappPendingPhone) return res.status(400).json({success:false,message:'WhatsApp verification session expired. Please request a new OTP.'});
+    if(!/^\d{6}$/.test(otp)) return res.status(400).json({success:false,message:'Enter the 6-digit OTP.'});
+    const result=await pool.query(`SELECT id,otp_hash,expires_at,attempts FROM whatsapp_otps WHERE phone=$1 ORDER BY created_at DESC LIMIT 1`,[phone]);
+    const row=result.rows[0];
+    if(!row || new Date(row.expires_at).getTime()<Date.now()) return res.status(400).json({success:false,message:'OTP expired. Please request a new one.'});
+    if(row.attempts>=5) return res.status(429).json({success:false,message:'Too many attempts. Please request a new OTP.'});
+    const hash=crypto.createHash('sha256').update(otp).digest('hex');
+    if(hash!==row.otp_hash){
+      await pool.query(`UPDATE whatsapp_otps SET attempts=attempts+1 WHERE id=$1`,[row.id]);
+      return res.status(400).json({success:false,message:'Invalid OTP.'});
+    }
+    await pool.query(`DELETE FROM whatsapp_otps WHERE id=$1`,[row.id]);
+    const client=await createOrGetPhoneClient(phone);
+    req.session.clientId=client.client_id;
+    req.session.userType='client';
+    req.session.socialProvider='whatsapp';
+    delete req.session.whatsappPendingPhone;
+    await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
+    return res.json({success:true,clientId:client.client_id,name:client.name});
+  }catch(err){
+    console.error('WhatsApp OTP verify error:',err.message);
+    return res.status(500).json({success:false,message:'WhatsApp verification failed.'});
+  }
+});
+
+/* =========================
+TRUECALLER LOGIN
+========================= */
+
+app.get('/api/auth/truecaller',(req,res)=>{
+  const clientId=process.env.TRUECALLER_CLIENT_ID;
+  const authorizeUrl=process.env.TRUECALLER_AUTHORIZE_URL;
+  if(!clientId || !authorizeUrl){
+    return res.status(503).send('Truecaller login is not configured on the server.');
+  }
+  const state=crypto.randomBytes(24).toString('hex');
+  req.session.oauthState=state;
+  req.session.oauthProvider='truecaller';
+  req.session.oauthNextSymbol=String(req.query.nextSymbol||'').trim().slice(0,80);
+  const redirectUri=process.env.TRUECALLER_REDIRECT_URI || `${(process.env.BACKEND_PUBLIC_URL||'https://alphaedge-backend-loxi.onrender.com').replace(/\/+$/,'')}/api/auth/truecaller/callback`;
+  const params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',scope:process.env.TRUECALLER_SCOPE||'profile',state});
+  return res.redirect(authorizeUrl+(authorizeUrl.includes('?')?'&':'?')+params.toString());
+});
+
+app.get('/api/auth/truecaller/callback',async(req,res)=>{
+  const frontend=oauthFrontendUrl();
+  try{
+    if(!req.query.code || !req.query.state || req.query.state!==req.session.oauthState) throw new Error('Truecaller verification failed. Please try again.');
+    if(req.session.oauthProvider!=='truecaller') throw new Error('Truecaller login session mismatch.');
+    const clientId=process.env.TRUECALLER_CLIENT_ID;
+    const clientSecret=process.env.TRUECALLER_CLIENT_SECRET;
+    const tokenUrl=process.env.TRUECALLER_TOKEN_URL;
+    const profileUrl=process.env.TRUECALLER_PROFILE_URL;
+    if(!clientId || !clientSecret || !tokenUrl || !profileUrl) throw new Error('Truecaller login is not fully configured on the server.');
+    const redirectUri=process.env.TRUECALLER_REDIRECT_URI || `${(process.env.BACKEND_PUBLIC_URL||'https://alphaedge-backend-loxi.onrender.com').replace(/\/+$/,'')}/api/auth/truecaller/callback`;
+    const tokenRes=await fetch(tokenUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,code:String(req.query.code),redirect_uri:redirectUri,grant_type:'authorization_code'})});
+    const token=await tokenRes.json().catch(()=>({}));
+    if(!tokenRes.ok || !token.access_token) throw new Error('Truecaller authorization failed.');
+    const profileRes=await fetch(profileUrl,{headers:{Authorization:`Bearer ${token.access_token}`}});
+    const profile=await profileRes.json().catch(()=>({}));
+    if(!profileRes.ok) throw new Error('Unable to read Truecaller profile.');
+    const phone=normalizedWhatsappPhone(profile.phoneNumber||profile.phone||profile.number);
+    if(!/^\+[1-9]\d{7,14}$/.test(phone)) throw new Error('Truecaller did not return a verified phone number.');
+    const client=await createOrGetPhoneClient(phone,profile.name||profile.firstName||'AlphaEdge User');
+    req.session.clientId=client.client_id; req.session.userType='client'; req.session.socialProvider='truecaller';
+    const nextSymbol=String(req.session.oauthNextSymbol||'').trim();
+    delete req.session.oauthState; delete req.session.oauthProvider; delete req.session.oauthNextSymbol;
+    await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
+    const target=new URL(frontend); target.searchParams.set('social','success'); target.searchParams.set('clientId',client.client_id); if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
+    return res.redirect(target.toString());
+  }catch(err){
+    console.error('truecaller OAuth error:',err.message);
+    const target=new URL(frontend); target.searchParams.set('social','error'); target.searchParams.set('message',err.message||'Truecaller login failed'); return res.redirect(target.toString());
+  }
+});
+
+/* =========================
+SOCIAL LOGIN — GOOGLE / FACEBOOK
+========================= */
+
+function oauthFrontendUrl(){
+  return process.env.OAUTH_FRONTEND_URL ||
+    process.env.FRONTEND_ORIGIN ||
+    'https://alphaedge-c3yf.onrender.com';
+}
+
+function oauthRedirectUri(provider){
+  const base=process.env.BACKEND_PUBLIC_URL ||
+    (process.env.RENDER_EXTERNAL_HOSTNAME
+      ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+      : 'https://alphaedge-backend-loxi.onrender.com');
+  const fallback=base.replace(/\/+$/,'');
+  return process.env[provider==='google'?'GOOGLE_REDIRECT_URI':'FACEBOOK_REDIRECT_URI'] ||
+    `${fallback}/api/auth/${provider}/callback`;
+}
+
+async function finishSocialLogin(req, provider, profile){
+  if(!pool || !databaseReady) throw new Error('Authentication database is unavailable');
+  const email=normalizeEmail(profile.email);
+  if(!email) throw new Error('The social account did not provide an email address.');
+
+  let result=await pool.query(
+    `SELECT id,client_id,name,phone,email,status FROM clients WHERE LOWER(email)=$1 LIMIT 1`,
+    [email]
+  );
+
+  let client=result.rows[0];
+  if(client && client.status!=='active') throw new Error('Account is not active.');
+
+  if(!client){
+    let clientId=null;
+    for(let i=0;i<20;i++){
+      const candidate=generateClientId();
+      const check=await pool.query(`SELECT 1 FROM clients WHERE client_id=$1`,[candidate]);
+      if(!check.rows.length){clientId=candidate;break;}
+    }
+    if(!clientId) throw new Error('Unable to create Client ID.');
+
+    const created=await pool.query(
+      `INSERT INTO clients(client_id,name,phone,email,password_hash,status)
+       VALUES($1,$2,NULL,$3,NULL,'active')
+       RETURNING id,client_id,name,phone,email,status`,
+      [clientId,String(profile.name||'AlphaEdge User').slice(0,100),email]
+    );
+    client=created.rows[0];
+  }
+
+  req.session.clientId=client.client_id;
+  req.session.userType='client';
+  req.session.socialProvider=provider;
+  await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
+  return client;
+}
+
+app.get('/api/auth/:provider', (req,res)=>{
+  const provider=String(req.params.provider||'').toLowerCase();
+  if(!['google','facebook'].includes(provider)) return res.status(404).send('Unsupported social login.');
+  const clientId=provider==='google'?process.env.GOOGLE_CLIENT_ID:process.env.FACEBOOK_APP_ID;
+  const clientSecret=provider==='google'?process.env.GOOGLE_CLIENT_SECRET:process.env.FACEBOOK_APP_SECRET;
+  if(!clientId || !clientSecret){
+    return res.status(503).send(`${provider[0].toUpperCase()+provider.slice(1)} login is not configured on the server.`);
+  }
+  const state=crypto.randomBytes(24).toString('hex');
+  req.session.oauthState=state;
+  req.session.oauthProvider=provider;
+  req.session.oauthNextSymbol=String(req.query.nextSymbol||'').trim().slice(0,80);
+  const redirectUri=oauthRedirectUri(provider);
+
+  if(provider==='google'){
+    const params=new URLSearchParams({
+      client_id:clientId,
+      redirect_uri:redirectUri,
+      response_type:'code',
+      scope:'openid email profile',
+      state,
+      access_type:'online',
+      prompt:'select_account'
+    });
+    return res.redirect('https://accounts.google.com/o/oauth2/v2/auth?'+params.toString());
+  }
+
+  const version=process.env.FACEBOOK_GRAPH_VERSION||'v24.0';
+  const params=new URLSearchParams({
+    client_id:clientId,
+    redirect_uri:redirectUri,
+    response_type:'code',
+    scope:'email,public_profile',
+    state
+  });
+  return res.redirect(`https://www.facebook.com/${version}/dialog/oauth?`+params.toString());
+});
+
+app.get('/api/auth/:provider/callback', async (req,res)=>{
+  const provider=String(req.params.provider||'').toLowerCase();
+  const frontend=oauthFrontendUrl();
+  try{
+    if(!['google','facebook'].includes(provider)) throw new Error('Unsupported social login.');
+    if(!req.query.code || !req.query.state || req.query.state!==req.session.oauthState){
+      throw new Error('Social login verification failed. Please try again.');
+    }
+    if(provider!==req.session.oauthProvider) throw new Error('Social login provider mismatch.');
+
+    const clientId=provider==='google'?process.env.GOOGLE_CLIENT_ID:process.env.FACEBOOK_APP_ID;
+    const clientSecret=provider==='google'?process.env.GOOGLE_CLIENT_SECRET:process.env.FACEBOOK_APP_SECRET;
+    const redirectUri=oauthRedirectUri(provider);
+    let profile={};
+
+    if(provider==='google'){
+      const tokenRes=await fetch('https://oauth2.googleapis.com/token',{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({
+          client_id:clientId,client_secret:clientSecret,code:String(req.query.code),
+          redirect_uri:redirectUri,grant_type:'authorization_code'
+        })
+      });
+      const token=await tokenRes.json();
+      if(!tokenRes.ok || !token.access_token) throw new Error('Google authorization failed.');
+      const userRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{
+        headers:{Authorization:`Bearer ${token.access_token}`}
+      });
+      const user=await userRes.json();
+      if(!userRes.ok) throw new Error('Unable to read Google account.');
+      profile={email:user.email,name:user.name};
+    }else{
+      const version=process.env.FACEBOOK_GRAPH_VERSION||'v24.0';
+      const tokenUrl=`https://graph.facebook.com/${version}/oauth/access_token?`+
+        new URLSearchParams({
+          client_id:clientId,client_secret:clientSecret,code:String(req.query.code),redirect_uri:redirectUri
+        }).toString();
+      const tokenRes=await fetch(tokenUrl);
+      const token=await tokenRes.json();
+      if(!tokenRes.ok || !token.access_token) throw new Error('Facebook authorization failed.');
+      const userUrl=`https://graph.facebook.com/${version}/me?fields=id,name,email&access_token=${encodeURIComponent(token.access_token)}`;
+      const userRes=await fetch(userUrl);
+      const user=await userRes.json();
+      if(!userRes.ok) throw new Error('Unable to read Facebook account.');
+      profile={email:user.email,name:user.name};
+    }
+
+    const client=await finishSocialLogin(req,provider,profile);
+    const nextSymbol=String(req.session.oauthNextSymbol||'').trim();
+    delete req.session.oauthState;
+    delete req.session.oauthProvider;
+    delete req.session.oauthNextSymbol;
+    const target=new URL(frontend);
+    target.searchParams.set('social','success');
+    target.searchParams.set('clientId',client.client_id);
+    if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
+    return res.redirect(target.toString());
+  }catch(err){
+    console.error(`${provider} OAuth error:`,err.message);
+    const target=new URL(frontend);
+    target.searchParams.set('social','error');
+    target.searchParams.set('message',err.message||'Social login failed');
+    return res.redirect(target.toString());
+  }
+});
 
 /* =========================
 CLIENT REGISTRATION
