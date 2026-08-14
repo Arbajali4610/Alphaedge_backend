@@ -82,3 +82,15 @@ Google/Facebook/Truecaller callbacks now issue a signed `authToken` to the front
 
 Optional environment variable:
 - `AUTH_TOKEN_SECRET` — long random secret. If omitted, `SESSION_SECRET` is used.
+
+
+## Truecaller Mobile Web Login
+
+Set these Render environment variables (do not put the App Key in frontend code):
+
+- `TRUECALLER_APP_KEY` = the App Key from Truecaller Developers
+- `TRUECALLER_APP_NAME` = `AlphaEdge`
+- `TRUECALLER_CALLBACK_URL` = `https://alphaedge-backend-loxi.onrender.com/api/auth/truecaller/callback`
+- `OAUTH_FRONTEND_URL` = `https://alphaedge-c3yf.onrender.com/`
+
+In Truecaller Developers, the **App domain** should be the frontend domain and the **Callback URL** should be the backend callback URL above. Truecaller Mobile Web posts `requestId` and `accessToken` to the callback; the frontend then polls the backend and receives the authenticated AlphaEdge session.

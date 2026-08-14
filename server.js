@@ -1205,54 +1205,168 @@ app.post('/api/auth/whatsapp/verify', async (req,res)=>{
 });
 
 /* =========================
-TRUECALLER LOGIN
+TRUECALLER MOBILE WEB LOGIN
 ========================= */
 
-app.get('/api/auth/truecaller',(req,res)=>{
-  const clientId=process.env.TRUECALLER_CLIENT_ID;
-  const authorizeUrl=process.env.TRUECALLER_AUTHORIZE_URL;
-  if(!clientId || !authorizeUrl){
-    return res.status(503).send('Truecaller login is not configured on the server.');
+// Truecaller's Mobile Web SDK does NOT use the normal OAuth redirect flow.
+// The browser opens a truecallersdk:// deep link; Truecaller then POSTs the
+// access token + requestId to our callback URL. We keep a short-lived pending
+// request and let the browser poll for completion.
+const truecallerPending = new Map();
+
+function truecallerAppKey(){
+  return String(process.env.TRUECALLER_APP_KEY || '').trim();
+}
+
+function truecallerCallbackUrl(){
+  return process.env.TRUECALLER_CALLBACK_URL ||
+    `${(process.env.BACKEND_PUBLIC_URL || 'https://alphaedge-backend-loxi.onrender.com').replace(/\/+$/,'')}/api/auth/truecaller/callback`;
+}
+
+function truecallerFrontendUrl(){
+  return process.env.OAUTH_FRONTEND_URL ||
+    process.env.FRONTEND_ORIGIN ||
+    'https://alphaedge-c3yf.onrender.com/';
+}
+
+function makeTruecallerRequestId(){
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+function cleanupTruecallerPending(){
+  const now=Date.now();
+  for(const [id,item] of truecallerPending.entries()){
+    if(!item || now-item.createdAt > 10*60*1000) truecallerPending.delete(id);
   }
-  const state=crypto.randomBytes(24).toString('hex');
-  req.session.oauthState=state;
-  req.session.oauthProvider='truecaller';
-  req.session.oauthNextSymbol=String(req.query.nextSymbol||'').trim().slice(0,80);
-  const redirectUri=process.env.TRUECALLER_REDIRECT_URI || `${(process.env.BACKEND_PUBLIC_URL||'https://alphaedge-backend-loxi.onrender.com').replace(/\/+$/,'')}/api/auth/truecaller/callback`;
-  const params=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',scope:process.env.TRUECALLER_SCOPE||'profile',state});
-  return res.redirect(authorizeUrl+(authorizeUrl.includes('?')?'&':'?')+params.toString());
+}
+setInterval(cleanupTruecallerPending, 60*1000).unref();
+
+app.get('/api/auth/truecaller/init',(req,res)=>{
+  const appKey=truecallerAppKey();
+  if(!appKey){
+    return res.status(503).json({success:false,message:'Truecaller login is not configured on the server. Add TRUECALLER_APP_KEY in Render Environment.'});
+  }
+
+  const requestId=makeTruecallerRequestId();
+  const nextSymbol=String(req.query.nextSymbol||'').trim().slice(0,80);
+  truecallerPending.set(requestId,{
+    createdAt:Date.now(),
+    status:'pending',
+    sessionId:req.sessionID,
+    nextSymbol,
+    result:null,
+    error:null
+  });
+
+  const params=new URLSearchParams({
+    type:'btmsheet',
+    requestNonce:requestId,
+    partnerKey:appKey,
+    partnerName:process.env.TRUECALLER_APP_NAME || 'AlphaEdge',
+    lang:process.env.TRUECALLER_LANGUAGE || 'en',
+    loginPrefix:'getstarted',
+    loginSuffix:'loginsignup',
+    ctaPrefix:'continuewith',
+    btnShape:'round',
+    skipOption:'useanothermethod',
+    ttl:String(process.env.TRUECALLER_TTL_MS || '120000')
+  });
+
+  return res.json({
+    success:true,
+    requestId,
+    deepLink:`truecallersdk://truesdk/web_verify?${params.toString()}`
+  });
 });
 
-app.get('/api/auth/truecaller/callback',async(req,res)=>{
-  const frontend=oauthFrontendUrl();
+async function processTruecallerCallback(body){
+  const requestId=String(body?.requestId || '').trim();
+  const accessToken=String(body?.accessToken || '').trim();
+  const endpoint=String(body?.endpoint || '').trim();
+  const pending=truecallerPending.get(requestId);
+  if(!pending) return;
+
   try{
-    if(!req.query.code || !req.query.state || req.query.state!==req.session.oauthState) throw new Error('Truecaller verification failed. Please try again.');
-    if(req.session.oauthProvider!=='truecaller') throw new Error('Truecaller login session mismatch.');
-    const clientId=process.env.TRUECALLER_CLIENT_ID;
-    const clientSecret=process.env.TRUECALLER_CLIENT_SECRET;
-    const tokenUrl=process.env.TRUECALLER_TOKEN_URL;
-    const profileUrl=process.env.TRUECALLER_PROFILE_URL;
-    if(!clientId || !clientSecret || !tokenUrl || !profileUrl) throw new Error('Truecaller login is not fully configured on the server.');
-    const redirectUri=process.env.TRUECALLER_REDIRECT_URI || `${(process.env.BACKEND_PUBLIC_URL||'https://alphaedge-backend-loxi.onrender.com').replace(/\/+$/,'')}/api/auth/truecaller/callback`;
-    const tokenRes=await fetch(tokenUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,code:String(req.query.code),redirect_uri:redirectUri,grant_type:'authorization_code'})});
-    const token=await tokenRes.json().catch(()=>({}));
-    if(!tokenRes.ok || !token.access_token) throw new Error('Truecaller authorization failed.');
-    const profileRes=await fetch(profileUrl,{headers:{Authorization:`Bearer ${token.access_token}`}});
+    if(!accessToken) throw new Error(body?.status==='user_rejected' ? 'Truecaller verification was cancelled.' : 'Truecaller did not return an access token.');
+
+    const profileUrl=endpoint || process.env.TRUECALLER_PROFILE_URL || 'https://profile4-noneu.truecaller.com/v1/default';
+    const profileRes=await fetch(profileUrl,{headers:{Authorization:`Bearer ${accessToken}`,'Cache-Control':'no-cache'}});
     const profile=await profileRes.json().catch(()=>({}));
     if(!profileRes.ok) throw new Error('Unable to read Truecaller profile.');
-    const phone=normalizedWhatsappPhone(profile.phoneNumber||profile.phone||profile.number);
-    if(!/^\+[1-9]\d{7,14}$/.test(phone)) throw new Error('Truecaller did not return a verified phone number.');
-    const client=await createOrGetPhoneClient(phone,profile.name||profile.firstName||'AlphaEdge User');
-    req.session.clientId=client.client_id; req.session.userType='client'; req.session.socialProvider='truecaller';
-    const nextSymbol=String(req.session.oauthNextSymbol||'').trim();
-    delete req.session.oauthState; delete req.session.oauthProvider; delete req.session.oauthNextSymbol;
-    await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
-    const target=new URL(frontend); target.searchParams.set('social','success'); target.searchParams.set('clientId',client.client_id); target.searchParams.set('authToken',createAuthToken(client.client_id,'truecaller')); if(nextSymbol) target.searchParams.set('nextSymbol',nextSymbol);
-    return res.redirect(target.toString());
+
+    const phoneRaw=Array.isArray(profile.phoneNumbers) ? profile.phoneNumbers[0] : (profile.phoneNumber || profile.phone || profile.number);
+    const phone=normalizedWhatsappPhone(phoneRaw);
+    if(!/^\+[1-9]\d{7,14}$/.test(phone)) throw new Error('Truecaller did not return a valid verified phone number.');
+
+    const first=String(profile?.name?.first || '').trim();
+    const last=String(profile?.name?.last || '').trim();
+    const name=String(`${first} ${last}`.trim() || (typeof profile.name==='string' ? profile.name : '') || 'AlphaEdge User').trim() || 'AlphaEdge User';
+    const client=await createOrGetPhoneClient(phone,name);
+
+    pending.status='success';
+    pending.result={
+      clientId:client.client_id,
+      name:client.name,
+      email:client.email,
+      phone:client.phone,
+      nextSymbol:pending.nextSymbol || ''
+    };
+    pending.error=null;
   }catch(err){
-    console.error('truecaller OAuth error:',err.message);
-    const target=new URL(frontend); target.searchParams.set('social','error'); target.searchParams.set('message',err.message||'Truecaller login failed'); return res.redirect(target.toString());
+    pending.status='error';
+    pending.error=err?.message || 'Truecaller login failed.';
+    console.error('Truecaller callback processing error:',pending.error);
   }
+}
+
+// Truecaller servers POST accessToken + requestId here. Respond immediately
+// and finish profile lookup in the background so we stay within their callback
+// response-time requirement.
+app.post('/api/auth/truecaller/callback',(req,res)=>{
+  const requestId=String(req.body?.requestId || '').trim();
+  if(!requestId) return res.status(400).json({success:false,message:'requestId is required'});
+  const pending=truecallerPending.get(requestId);
+  if(!pending) return res.status(404).json({success:false,message:'Unknown or expired Truecaller request.'});
+  res.sendStatus(200);
+  processTruecallerCallback(req.body).catch(err=>console.error('Truecaller background error:',err.message));
+});
+
+// Browser polls this endpoint after opening the Truecaller deep link. Once
+// the callback has been processed, bind the authenticated client to the
+// browser session and return the same client information used by normal login.
+app.get('/api/auth/truecaller/status',(req,res)=>{
+  const requestId=String(req.query.requestId || '').trim();
+  const pending=truecallerPending.get(requestId);
+  if(!pending) return res.status(404).json({success:false,status:'expired',message:'Truecaller request expired. Please try again.'});
+
+  if(pending.status==='pending') return res.json({success:true,status:'pending'});
+  if(pending.status==='error'){
+    const message=pending.error || 'Truecaller login failed.';
+    truecallerPending.delete(requestId);
+    return res.status(400).json({success:false,status:'error',message});
+  }
+
+  if(pending.status==='success'){
+    const client=pending.result;
+    req.session.clientId=client.clientId;
+    req.session.userType='client';
+    req.session.socialProvider='truecaller';
+    req.session.cookie.maxAge=1000*60*60*24*30;
+    return req.session.save(err=>{
+      if(err) return res.status(500).json({success:false,message:'Unable to save Truecaller login session.'});
+      truecallerPending.delete(requestId);
+      return res.json({success:true,status:'success',client});
+    });
+  }
+
+  return res.json({success:true,status:'pending'});
+});
+
+// Keep the old GET route friendly for anyone opening the endpoint directly.
+app.get('/api/auth/truecaller',(req,res)=>{
+  const appKey=truecallerAppKey();
+  if(!appKey) return res.status(503).send('Truecaller login is not configured on the server.');
+  return res.redirect(`${truecallerFrontendUrl()}?truecaller=start`);
 });
 
 /* =========================
