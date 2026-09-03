@@ -67,6 +67,11 @@ async function initDatabase() {
   }
 
   try {
+    // Create the current schema when the database is empty.
+    // Existing installations are migrated additively below so old client
+    // records are preserved. CREATE TABLE IF NOT EXISTS does not update an
+    // already-existing table, which was the cause of the admin client list
+    // breaking after older AlphaEdge schemas were reused.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clients (
         id BIGSERIAL PRIMARY KEY,
@@ -104,8 +109,60 @@ async function initDatabase() {
       ON market_snapshots(symbol, captured_at DESC);
     `);
 
+    // Non-destructive schema compatibility migration for databases created
+    // by earlier AlphaEdge versions. Never drop or overwrite an existing
+    // column. If an older schema used `mobile`, copy it into the new `phone`
+    // column while keeping `mobile` intact.
+    const clientColumnsResult = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'clients'
+    `);
+    const clientColumns = new Set(clientColumnsResult.rows.map(r => r.column_name));
+
+    if (!clientColumns.has('phone')) {
+      await pool.query(`ALTER TABLE clients ADD COLUMN phone VARCHAR(20)`);
+      clientColumns.add('phone');
+    }
+
+    if (!clientColumns.has('password_hash')) {
+      await pool.query(`ALTER TABLE clients ADD COLUMN password_hash TEXT`);
+      clientColumns.add('password_hash');
+    }
+
+    if (!clientColumns.has('status')) {
+      await pool.query(`ALTER TABLE clients ADD COLUMN status VARCHAR(20) DEFAULT 'active'`);
+      await pool.query(`UPDATE clients SET status = 'active' WHERE status IS NULL`);
+      await pool.query(`ALTER TABLE clients ALTER COLUMN status SET DEFAULT 'active'`);
+      clientColumns.add('status');
+    }
+
+    if (!clientColumns.has('created_at')) {
+      await pool.query(`ALTER TABLE clients ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW()`);
+      await pool.query(`UPDATE clients SET created_at = NOW() WHERE created_at IS NULL`);
+      await pool.query(`ALTER TABLE clients ALTER COLUMN created_at SET DEFAULT NOW()`);
+      clientColumns.add('created_at');
+    }
+
+    if (clientColumns.has('mobile')) {
+      // Preserve the old mobile column and only fill missing phone values.
+      await pool.query(`
+        UPDATE clients
+        SET phone = mobile
+        WHERE (phone IS NULL OR BTRIM(phone) = '')
+          AND mobile IS NOT NULL
+          AND BTRIM(mobile) <> ''
+      `);
+    }
+
+    // Phone/password were intentionally optional for social/legacy accounts.
     await pool.query(`ALTER TABLE clients ALTER COLUMN phone DROP NOT NULL`);
     await pool.query(`ALTER TABLE clients ALTER COLUMN password_hash DROP NOT NULL`);
+
+    // Do not create a UNIQUE constraint here: legacy data may contain
+    // duplicate/blank phone values. The existing client_id/email uniqueness
+    // remains untouched, and this migration therefore cannot fail or delete
+    // data because of old phone records.
     databaseReady = true;
     console.log('PostgreSQL database ready.');
 
