@@ -4,14 +4,13 @@ const WebSocket = require('ws');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
 
 const app = express();
 
 const PORT = process.env.PORT || 10000;
 const ACCESS_TOKEN = process.env.UPSTOX_ACCESS_TOKEN;
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL = process.env.DATABASE_URL; // retained only for backward compatibility; SQLite is now authoritative.
 
 app.set('trust proxy', 1);
 
@@ -42,66 +41,119 @@ app.use((req, res, next) => {
 DATABASE
 ========================= */
 
-let pool = null;
 let databaseReady = false;
 
-if (DATABASE_URL) {
-  pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    },
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
-  });
+// SQLite is the sole application database. The old PostgreSQL database is not
+// opened, written to, migrated, or deleted by this server.
+const DATA_DIR = process.env.DATA_DIR || require('path').join(process.cwd(), 'data');
+require('fs').mkdirSync(DATA_DIR, { recursive: true });
+const sqlite = new Database(require('path').join(DATA_DIR, 'alphaedge.db'));
+sqlite.pragma('journal_mode = WAL');
+sqlite.pragma('foreign_keys = ON');
 
-  pool.on('error', (err) => {
-    console.error('PostgreSQL pool error:', err.message);
-  });
-}
+// Small PostgreSQL-compatibility layer so the existing API routes can keep
+// their parameterized SQL while the actual storage is SQLite.
+sqlite.function('NOW', () => new Date().toISOString());
+sqlite.function('REGEXP_REPLACE', (value, pattern, replacement, flags) => {
+  try { return String(value ?? '').replace(new RegExp(pattern, flags || ''), replacement); }
+  catch (_) { return String(value ?? ''); }
+});
 
-async function initDatabase() {
-  if (!pool) {
-    console.warn('DATABASE_URL is not configured. Authentication is disabled.');
-    return;
+const pool = {
+  async query(text, params = []) {
+    let sql = String(text);
+
+    // Translate PostgreSQL-only expressions used by the legacy routes.
+    sql = sql.replace(/NOW\(\)\s*\+\s*INTERVAL\s*'5 minutes'/gi,
+      "datetime('now','+5 minutes')");
+    sql = sql.replace(/NOW\(\)/gi, "datetime('now')");
+    sql = sql.replace(/CURRENT_SCHEMA\(\)/gi, "'main'");
+    sql = sql.replace(/BTRIM\(/gi, "trim(");
+    sql = sql.replace(/TIMESTAMPTZ/gi, "TEXT");
+    sql = sql.replace(/BIGSERIAL/gi, "INTEGER");
+    sql = sql.replace(/VARCHAR\(\d+\)/gi, "TEXT");
+    sql = sql.replace(/NUMERIC\(\d+,\d+\)/gi, "REAL");
+    sql = sql.replace(/ALTER TABLE clients ALTER COLUMN [^;]+;?/gi, "");
+    sql = sql.replace(/CREATE INDEX IF NOT EXISTS market_snapshots_symbol_time_idx\s+ON market_snapshots\(symbol, captured_at DESC\);?/gi,
+      "CREATE INDEX IF NOT EXISTS market_snapshots_symbol_time_idx ON market_snapshots(symbol, captured_at DESC);");
+
+    // PostgreSQL numbered placeholders -> SQLite positional placeholders.
+    sql = sql.replace(/\$(\d+)/g, '?');
+
+    // PostgreSQL information_schema compatibility used only during old init.
+    if (/information_schema\.columns/i.test(sql)) {
+      const rows = sqlite.prepare("PRAGMA table_info(clients)").all()
+        .map(r => ({ column_name: r.name }));
+      return { rows, rowCount: rows.length };
+    }
+
+    // `RETURNING` is supported by modern SQLite/better-sqlite3.
+    const stmt = sqlite.prepare(sql);
+    if (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql) || /\bRETURNING\b/i.test(sql)) {
+      const rows = stmt.all(...params);
+      return { rows, rowCount: rows.length };
+    }
+
+    const result = stmt.run(...params);
+    return {
+      rows: [],
+      rowCount: result.changes,
+      lastInsertId: result.lastInsertRowid
+    };
   }
+};
 
+function initDatabase() {
   try {
-    await pool.query(`
+    sqlite.exec(`
       CREATE TABLE IF NOT EXISTS clients (
-        id BIGSERIAL PRIMARY KEY,
-        client_id VARCHAR(30) UNIQUE NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        phone VARCHAR(20) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'active',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT UNIQUE,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
+      CREATE TABLE IF NOT EXISTS whatsapp_otps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS whatsapp_otps_phone_idx
+        ON whatsapp_otps(phone, created_at DESC);
+
       CREATE TABLE IF NOT EXISTS market_snapshots (
-        id BIGSERIAL PRIMARY KEY,
-        symbol VARCHAR(30) NOT NULL,
-        ltp NUMERIC(14,4) NOT NULL,
-        close NUMERIC(14,4),
-        change_pct NUMERIC(10,4),
-        captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        ltp REAL NOT NULL,
+        close REAL,
+        change_pct REAL,
+        captured_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE INDEX IF NOT EXISTS market_snapshots_symbol_time_idx
-      ON market_snapshots(symbol, captured_at DESC);
+        ON market_snapshots(symbol, captured_at DESC);
     `);
 
-    databaseReady = true;
-    console.log('PostgreSQL database ready.');
+    // Additive compatibility only. Existing SQLite data is preserved.
+    const cols = new Set(sqlite.prepare("PRAGMA table_info(clients)").all().map(r => r.name));
+    if (!cols.has('phone')) sqlite.exec("ALTER TABLE clients ADD COLUMN phone TEXT");
+    if (!cols.has('password_hash')) sqlite.exec("ALTER TABLE clients ADD COLUMN password_hash TEXT");
+    if (!cols.has('status')) sqlite.exec("ALTER TABLE clients ADD COLUMN status TEXT DEFAULT 'active'");
+    if (!cols.has('created_at')) sqlite.exec("ALTER TABLE clients ADD COLUMN created_at TEXT DEFAULT (datetime('now'))");
 
+    databaseReady = true;
+    console.log(`SQLite database ready: ${require('path').join(DATA_DIR, 'alphaedge.db')}`);
   } catch (err) {
     databaseReady = false;
-    console.error(
-      'PostgreSQL initialization failed:',
-      err.message
-    );
+    console.error('SQLite initialization failed:', err.message);
   }
 }
 
@@ -109,42 +161,19 @@ async function initDatabase() {
 SESSION
 ========================= */
 
-if (pool) {
-  app.use(
-    session({
-      store: new pgSession({
-        pool,
-        tableName: 'user_sessions',
-        createTableIfMissing: true
-      }),
-
-      secret:
-        process.env.SESSION_SECRET ||
-        'CHANGE_THIS_SESSION_SECRET',
-
-      resave: false,
-      saveUninitialized: false,
-
-      cookie: {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: null
-      }
-    })
-  );
-} else {
-  app.use(
-    session({
-      secret:
-        process.env.SESSION_SECRET ||
-        'CHANGE_THIS_SESSION_SECRET',
-
-      resave: false,
-      saveUninitialized: false
-    })
-  );
-}
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'CHANGE_THIS_SESSION_SECRET',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: null
+    }
+  })
+);
 
 /* =========================
 MARKET DATA
@@ -439,7 +468,7 @@ app.get('/api/market', async (req, res) => {
 
 app.get('/api/market/history', async (req, res) => {
 
-  if (!pool || !databaseReady) {
+  if (!databaseReady) {
     return res.json({
       success: true,
       history: []
@@ -1033,7 +1062,7 @@ app.post(
   '/api/auth/register',
   async (req, res) => {
 
-    if (!pool || !databaseReady) {
+    if (!databaseReady) {
 
       return res.status(503).json({
         success: false,
@@ -1230,7 +1259,7 @@ ACCOUNT RECOVERY
 app.post(
   '/api/auth/forgot-client',
   async (req, res) => {
-    if (!pool || !databaseReady) {
+    if (!databaseReady) {
       return res.status(503).json({
         success: false,
         message: 'Authentication database is unavailable'
@@ -1282,7 +1311,7 @@ app.post(
 app.post(
   '/api/auth/forgot-password',
   async (req, res) => {
-    if (!pool || !databaseReady) {
+    if (!databaseReady) {
       return res.status(503).json({
         success: false,
         message: 'Authentication database is unavailable'
@@ -1364,7 +1393,7 @@ app.post(
   '/api/auth/login',
   async (req, res) => {
 
-    if (!pool || !databaseReady) {
+    if (!databaseReady) {
 
       return res.status(503).json({
         success: false,
@@ -1778,10 +1807,10 @@ app.post('/api/admin/logout', (req, res) => {
 });
 
 app.get('/api/admin/clients', requireAdmin, async (req, res) => {
-  if (!pool || !databaseReady) {
+  if (!databaseReady) {
     return res.status(503).json({
       success: false,
-      message: 'Database unavailable'
+      message: 'SQLite database unavailable'
     });
   }
 
