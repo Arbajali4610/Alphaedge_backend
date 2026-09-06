@@ -1,28 +1,3 @@
-# AlphaEdge Backend
-
-Express + SQLite backend for the AlphaEdge frontend.
-
-## What it provides
-- Client registration with server-side SQLite storage.
-- Password hashing with bcryptjs; plaintext passwords are never stored.
-- Client ID generation (`AE100001`, `AE100002`, ...).
-- Login/logout using an HTTP-only session cookie.
-- Forgot Client ID / Forgot Password endpoints.
-- Profile update endpoint.
-- Upstox Market Data Feed V3 bridge to `/api/market` and `/api/market-stream`.
-- Real-time NIFTY 50, SENSEX and BANK NIFTY updates pushed to the existing frontend via Server-Sent Events.
-
-## Setup
-1. Install Node.js 20+.
-2. Copy `.env.example` to `.env`.
-3. Put your Upstox **access token** in `UPSTOX_ACCESS_TOKEN`.
-4. `npm install`
-5. `npm start`
-
-The backend serves the frontend from `../frontend` when this package is run from the full-stack folder.
-
-## Important
-GitHub Pages is static hosting and cannot run this backend. Deploy the backend on a Node-capable service (Render, Railway, VPS, etc.) and point the frontend API URL to that server if frontend/backend are on different domains.
 
 
 
@@ -78,19 +53,4 @@ Callback URLs for the current backend:
 WhatsApp does not use an OAuth callback; it sends a one-time password through the configured WhatsApp template.
 
 ## Social login session handoff
-Google/Facebook/Truecaller callbacks now issue a signed `authToken` to the frontend. The frontend stores it and sends it as a Bearer token to the backend, so social login remains functional even when the browser blocks cross-site session cookies between the separate Render frontend and backend domains.
-
-Optional environment variable:
-- `AUTH_TOKEN_SECRET` — long random secret. If omitted, `SESSION_SECRET` is used.
-
-
-## Truecaller Mobile Web Login
-
-Set these Render environment variables (do not put the App Key in frontend code):
-
-- `TRUECALLER_APP_KEY` = the App Key from Truecaller Developers
-- `TRUECALLER_APP_NAME` = `AlphaEdge`
-- `TRUECALLER_CALLBACK_URL` = `https://alphaedge-backend-loxi.onrender.com/api/auth/truecaller/callback`
-- `OAUTH_FRONTEND_URL` = `https://alphaedge-c3yf.onrender.com/`
-
-In Truecaller Developers, the **App domain** should be the frontend domain and the **Callback URL** should be the backend callback URL above. Truecaller Mobile Web posts `requestId` and `accessToken` to the callback; the frontend then polls the backend and receives the authenticated AlphaEdge session.
+The frontend stores the short-lived signed social `authToken` returned after Google/Facebook/Truecaller authentication and sends it to the backend as a Bearer token. This avoids relying solely on cross-site cookies between the separate Render frontend and backend services.

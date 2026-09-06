@@ -1,0 +1,1941 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07111b">
+<title>AlphaEdge</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#07111b;color:#eaf2f8;font-family:Arial,sans-serif}
+button,input,textarea{font:inherit}
+button{cursor:pointer}
+.app{display:flex;min-height:100vh}
+.side{width:190px;background:#08131e;border-right:1px solid #203142;padding:22px 12px;position:sticky;top:0;height:100vh;min-height:100vh;flex:0 0 190px;overflow-y:auto;overflow-x:hidden;z-index:10}
+.logo{font-size:20px;font-weight:800;padding:0 7px 25px}
+.brand-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.brand-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#28d5a0,#159b78);color:#06131b;font-weight:900;letter-spacing:-1px;box-shadow:0 8px 22px #0005}
+.brand-name{font-size:23px;font-weight:850;letter-spacing:-.5px}.brand-name span{color:#28d5a0}
+.logo span{color:#28d5a0}
+.nav{display:flex;flex-direction:column;gap:7px}
+.nav button{border:0;background:transparent;color:#8fa0b1;text-align:left;padding:11px 9px;border-radius:9px}
+.nav button:hover,.nav button.active{background:#10283a;color:#fff}
+.logout{margin-top:25px!important}
+.main{flex:1;min-width:0}
+.top{height:62px;border-bottom:1px solid #1d2d3d;display:flex;align-items:center;justify-content:space-between;padding:0 25px}.content{padding:14px 25px 25px}
+.title{font-size:14px;font-weight:600;line-height:1.15;max-width:220px}
+.greeting{font-size:20px;font-weight:800;margin:0 0 14px}.greeting-sub{font-size:11px;color:#71879b;margin:-8px 0 14px}
+.sub,.contact-note{font-size:11px;color:#71879b;margin-top:3px}
+.user{display:flex;align-items:center;gap:8px;color:#8fa0b1;font-size:11px}.user .avatar{width:32px;height:32px}
+.avatar,.big-avatar{border-radius:50%;background:#16364a;display:grid;place-items:center;color:#8eead0;overflow:hidden}
+.avatar{width:34px;height:34px;cursor:pointer}
+.avatar img,.big-avatar img{width:100%;height:100%;object-fit:cover}
+.content{padding:14px 25px 25px;max-width:1100px}
+.page{display:none}.page.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card,.panel{background:#0b1926;border:1px solid #1b2e40;border-radius:13px}
+.card{padding:16px}
+.label{font-size:10px;color:#71879b;text-transform:uppercase}
+.value{font-size:20px;font-weight:700;margin-top:7px}
+.up{color:#2ed6a0;font-size:11px}.down{color:#df7184;font-size:11px}
+.row{display:grid;grid-template-columns:1.35fr .85fr;gap:12px;margin-top:12px}
+.panel{padding:16px}.panel h3{font-size:13px;margin:0 0 16px}
+.chart{height:230px}.chart svg{width:100%;height:100%}
+.watch{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #182b3b;font-size:12px}
+.education-panel{padding:16px}
+.education-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.education-head h3{margin:0 0 8px;font-size:18px}
+.education-toolbar{margin-bottom:14px}
+.education-list{display:flex;flex-direction:column;gap:10px}
+.education-item{background:#0b1926;border:1px solid #1b2e40;border-radius:13px;padding:14px;display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:center}
+.education-id{color:#8fa0b1;font-size:13px;text-align:center}
+.education-title{font-size:15px;font-weight:700;line-height:1.3}
+.education-meta{color:#71879b;font-size:11px;margin-top:5px}
+.education-actions{display:flex;flex-direction:column;gap:7px;align-items:stretch;min-width:116px}
+.education-actions .action{width:100%;margin:0}
+.education-empty{padding:30px;text-align:center;color:#71879b}
+@media(max-width:760px){
+  .side{width:190px;flex-basis:190px}
+  .content{padding:12px 12px 22px;max-width:none}
+  .education-head{gap:8px}
+  .education-head h3{font-size:16px}
+  .education-item{grid-template-columns:42px minmax(0,1fr);gap:10px}
+  .education-id{font-size:11px}
+  .education-title{font-size:14px}
+  .education-actions{grid-column:2;min-width:0;display:grid;grid-template-columns:1fr 1fr}
+  .education-actions .action{font-size:11px;padding:10px 6px}
+}
+.table{width:100%;border-collapse:collapse;font-size:11px}
+.table th{color:#73889b;text-align:left;font-weight:normal}
+.table th,.table td{padding:11px 7px;border-bottom:1px solid #182b3b}
+.pill{display:inline-block;background:#0c4b3d;color:#55dcb8;border-radius:12px;padding:4px 8px;font-size:9px}
+.action{border:1px solid #274054;background:#102132;color:#dce8f2;padding:9px 13px;border-radius:8px}
+.action:hover{background:#163249}
+.primary{border:0;background:#28d5a0;color:#06131b;font-weight:700;padding:10px 13px;border-radius:8px}
+.confirm-link,.legal-link{border:0;background:none;color:#55dcb8;text-decoration:underline;font-size:10px;cursor:pointer;padding:0}
+.form{display:grid;gap:13px}
+.form label{font-size:11px;color:#8da0b3}
+.form input,.form textarea{width:100%;margin-top:6px;padding:11px 12px;background:#071521;border:1px solid #24394c;border-radius:8px;color:#fff;outline:none}
+.form textarea{min-height:110px;resize:vertical}
+.profilebox{max-width:650px}
+.profile-photo{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+.big-avatar{width:76px;height:76px}
+.photo-btn{display:inline-block;padding:8px 11px;border:1px solid #274054;background:#102132;border-radius:8px;font-size:11px}
+.required-star{color:#ff4d5f}
+.error{color:#df7184;font-size:11px;display:none}
+.success{color:#2ed6a0;font-size:11px;display:none}
+.legal-overlay,.login-overlay,.utility-overlay{position:fixed;inset:0;background:#06101a;display:none;align-items:center;justify-content:center;padding:20px;z-index:20}.legal-overlay{z-index:1000}.utility-overlay{z-index:900}
+.legal-overlay.show,.login-overlay.show,.utility-overlay.show{display:flex}
+.legal-box,.login,.utility-box{width:min(650px,100%);max-height:90vh;overflow:auto;background:#0b1926;border:1px solid #1d3548;border-radius:16px;padding:24px} .privacy-box{width:min(700px,100%);max-height:92vh;padding:28px} .privacy-box .modal-actions{position:sticky;bottom:0;background:#0b1926;padding-top:16px;margin-top:22px} .privacy-box h3{margin:24px 0 9px;font-size:18px} .privacy-box p{font-size:14px;line-height:1.8}
+.login{width:min(430px,100%)}.social-divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:#71879b;font-size:10px}
+.social-divider::before,.social-divider::after{content:"";height:1px;background:#1d3548;flex:1}
+.social-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.social-btn{border:1px solid #29455a;border-radius:10px;padding:10px 8px;background:#102132;color:#dce8f2;font-weight:700;font-size:11px;cursor:pointer}
+.social-btn:hover{border-color:#55dcb8}
+.social-btn.truecaller{background:#fff;color:#111;border-color:#d9d9d9}
+@media(max-width:520px){.social-row{grid-template-columns:1fr}.social-btn{width:100%}}
+
+.utility-box{width:min(430px,100%)}
+.legal-box p,.legal-box li{color:#9dafc0;font-size:12px;line-height:1.7}
+.legal-close{float:right;background:#102132;border:1px solid #274054;color:#fff;border-radius:7px;padding:7px 11px}
+.terms{display:flex;gap:8px;align-items:flex-start;color:#8296a9;font-size:11px}
+.terms input{margin-top:2px}
+.terms input[type="checkbox"]{
+  width:14px;height:14px;margin:1px 0 0;
+  appearance:none;-webkit-appearance:none;
+  border:1px solid #8b9aaa;border-radius:3px;
+  background:#fff;position:relative;flex:0 0 14px;
+  opacity:1;cursor:default;
+}
+.terms input[type="checkbox"]:checked{
+  background:#28d5a0;border-color:#28d5a0;
+}
+.terms input[type="checkbox"]:checked::after{
+  content:"✓";position:absolute;left:2px;top:-2px;
+  color:#06131b;font-weight:900;font-size:14px;
+}
+.password-field{position:relative}
+.password-field input{padding-right:48px;width:100%}
+.password-toggle{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  width:34px;height:30px;padding:0;border-radius:9px;
+  border:1px solid #29465a;background:#102132;color:#9bead7;
+  display:none;align-items:center;justify-content:center;
+  font-size:17px;line-height:1;box-shadow:none;
+}
+.password-toggle.visible{display:flex}
+.password-toggle.revealed{background:#111820;color:#28d5a0}
+
+.modal-title{font-size:18px;margin:0 0 8px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
+.loading{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#080c16bb;z-index:999}
+.loading.show{display:flex}
+.loading-box{padding:25px 35px;border-radius:15px;background:#111827;text-align:center}
+.spinner{width:30px;height:30px;margin:auto;border:3px solid #ffffff40;border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:750px){.side{width:155px;flex-basis:155px}.cards{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.content{padding:14px}.top{padding:0 14px}.title{font-size:13px;max-width:155px}}
+@media(max-width:520px){.side{width:120px;flex-basis:120px}.nav button{font-size:11px}.cards{grid-template-columns:1fr 1fr}.top .sub{display:none}}
+
+
+/* RESEARCH CENTRE 500 TOPICS */
+.research-panel{padding:18px;overflow:hidden}
+.research-toolbar{display:flex;gap:9px;align-items:center;margin:12px 0;flex-wrap:wrap}
+.research-search{flex:1;min-width:190px;background:#071521;border:1px solid #24394c;border-radius:10px;padding:11px 12px;color:#fff;outline:none;font-size:12px}
+.research-count{font-size:10px;color:#71879b;white-space:nowrap}
+.research-tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.research-tabs::-webkit-scrollbar{display:none}
+.research-tab{border:1px solid #274054;background:#102132;color:#9dafc0;border-radius:18px;padding:7px 11px;font-size:10px;white-space:nowrap;cursor:pointer}
+.research-tab.active{background:#28d5a0;color:#06131b;border-color:#28d5a0;font-weight:700}
+.research-list{display:grid;gap:8px;max-height:calc(100vh - 330px);overflow:auto;padding-right:2px}
+.research-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid #1d3548;background:#0b1926;border-radius:10px;cursor:pointer}
+.research-item:hover{background:#102132;border-color:#274054}
+.research-item-main{min-width:0}
+.research-num{font-size:9px;color:#28d5a0;margin-bottom:3px}
+.research-title{font-size:10px;color:#dce8f2;line-height:1.35}
+.research-category{font-size:9px;color:#71879b;margin-top:4px}
+.research-open{border:1px solid #274054;background:#102132;color:#dce8f2;padding:7px 10px;border-radius:8px;font-size:9px;white-space:nowrap}
+.research-empty{padding:24px;text-align:center;color:#71879b;font-size:12px}
+@media(max-width:520px){.research-list{max-height:calc(100vh - 315px)}.research-item{padding:11px}.research-title{font-size:9.5px}.research-open{padding:6px 8px}}
+
+/* EQUITY HUB */
+.equity-panel{padding:18px;overflow:hidden}
+.equity-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.equity-head h3{margin-bottom:4px}
+.equity-count{font-size:10px;color:#71879b;white-space:nowrap}
+.equity-search{display:flex;align-items:center;gap:9px;margin:12px 0;background:#071521;border:1px solid #24394c;border-radius:10px;padding:0 12px;color:#71879b}
+.equity-search input{width:100%;border:0;outline:0;background:transparent;color:#fff;padding:11px 0;font-size:12px}
+.equity-tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.equity-tabs::-webkit-scrollbar{display:none}
+.eq-tab{border:1px solid #274054;background:#102132;color:#9dafc0;border-radius:18px;padding:7px 11px;font-size:10px;white-space:nowrap}
+.eq-tab.active{background:#28d5a0;color:#06131b;border-color:#28d5a0;font-weight:700}
+.equity-list{display:grid;gap:7px;max-height:calc(100vh - 255px);overflow:auto;padding-right:2px}
+.equity-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 10px;border:1px solid #182f41;background:#091724;border-radius:10px;cursor:pointer}
+.equity-item:hover{background:#102536;border-color:#2a485e}
+.eq-main{min-width:0}
+.eq-name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eq-symbol{font-size:9px;color:#71879b;margin-top:3px}
+.eq-tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.eq-tag{font-size:8px;color:#55dcb8;border:1px solid #245043;border-radius:9px;padding:3px 5px;white-space:nowrap}
+.eq-price{text-align:right;min-width:70px}
+.eq-ltp{font-size:11px;font-weight:700}
+.eq-change{font-size:9px;margin-top:3px}
+.equity-detail-panel{min-height:500px}
+.detail-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.detail-title{font-size:21px;margin:14px 0 3px}
+.detail-meta{font-size:10px;color:#71879b}
+.detail-price-row{display:flex;align-items:flex-end;gap:10px;margin:14px 0 6px;flex-wrap:wrap}
+.detail-price{font-size:28px;font-weight:800;letter-spacing:-.5px}
+.detail-change{font-size:12px;font-weight:700;padding-bottom:4px}
+.detail-change.up{color:#28d5a0}.detail-change.down{color:#ff6b6b}
+.chart-toolbar{display:flex;align-items:center;gap:7px;overflow-x:auto;padding:8px 0 7px;scrollbar-width:none}
+.chart-toolbar::-webkit-scrollbar{display:none}
+.chart-range{border:1px solid #274054;background:#102132;color:#a8bac9;border-radius:16px;padding:7px 10px;font-size:10px;white-space:nowrap;cursor:pointer}
+.chart-range.active{background:#28d5a0;color:#06131b;border-color:#28d5a0;font-weight:700}
+.chart-interval{margin-left:auto;min-width:76px;background:#071521;border:1px solid #274054;color:#dce8f2;border-radius:9px;padding:7px 8px;font-size:10px;outline:none}
+.history-wrap{height:310px;margin-top:5px;border:1px solid #1b3244;border-radius:12px;background:#071521;padding:8px;overflow:hidden}
+.history-wrap svg{width:100%;height:100%}
+.history-note{font-size:9px;color:#71879b;margin-top:8px;line-height:1.5}
+.history-loading{height:100%;display:grid;place-items:center;color:#8fa0b1;font-size:11px}
+.detail-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.detail-stat{background:#071521;border:1px solid #1b3244;border-radius:10px;padding:10px}
+.detail-stat span{display:block;font-size:9px;color:#71879b;margin-bottom:5px}
+.detail-stat b{font-size:12px}
+.detail-tabs{display:flex;gap:18px;border-bottom:1px solid #20384a;margin-top:15px;overflow-x:auto}
+.detail-tab{padding:10px 2px;color:#8fa0b1;font-size:11px;white-space:nowrap}
+.detail-tab.active{color:#28d5a0;border-bottom:2px solid #28d5a0}
+@media(max-width:520px){
+  .equity-list{max-height:none}
+  .detail-stats{grid-template-columns:1fr 1fr}
+  .history-wrap{height:255px}
+  .detail-price{font-size:25px}
+}
+
+.watch-clickable{cursor:pointer;transition:.15s}.watch-clickable:hover{background:#102536;border-color:#2a485e}.watch-clickable:focus{outline:2px solid #28d5a0;outline-offset:1px}
+.detail-tabs button{font:inherit;background:transparent;border:0;cursor:pointer}
+.detail-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.detail-info-card,.detail-info{margin-top:12px;background:#071521;border:1px solid #1b3244;border-radius:10px;padding:14px;color:#9dafc0;font-size:10px;line-height:1.55}
+.detail-info-card h4{margin:0 0 6px;color:#dce8f2;font-size:12px}.detail-info-card p{margin:0}
+@media(max-width:520px){.detail-info-grid{grid-template-columns:1fr 1fr}}
+.watch-search{width:100%;box-sizing:border-box;margin:12px 0 14px;padding:12px 14px;border:1px solid #29465a;border-radius:10px;background:#071521;color:#eaf2f8;font-size:14px;outline:none}.watch-search::placeholder{color:#71879b}.watch-search:focus{border-color:#28d5a0;box-shadow:0 0 0 2px #28d5a022}
+
+
+
+/* ALPHAEDGE COMPACT MOBILE */
+@media(max-width:520px){
+  .app{min-width:0}
+  .side{width:76px;flex-basis:76px;padding:14px 6px}
+  .side .logo{font-size:12px;padding:0 3px 16px;white-space:nowrap;overflow:hidden}
+  .nav{gap:4px}
+  .nav button{font-size:9px;padding:8px 4px;text-align:center;border-radius:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .logout{margin-top:14px!important}
+  .top{height:58px;padding:0 8px}
+  .title{font-size:14px;max-width:190px}
+  .user{font-size:9px;gap:5px}
+  .user span{display:none}
+  .avatar{width:28px;height:28px}
+  .content{padding:8px;max-width:none}
+  .panel{padding:10px;border-radius:10px}
+}
+@media(max-width:360px){
+  .side{width:64px;flex-basis:64px;padding-left:4px;padding-right:4px}
+  .side .logo{font-size:10px}
+  .nav button{font-size:8px;padding:7px 2px}
+  .content{padding:6px}
+  .panel{padding:8px}
+}
+
+</style>
+
+<style id="alphaedge-light-theme">
+html,body{background:#f5f7fa!important;color:#17212b!important}
+body{color-scheme:light!important}
+.side{background:#ffffff!important;border-right:1px solid #dfe5eb!important;box-shadow:2px 0 10px rgba(20,35,50,.04)}
+.nav button{color:#64748b!important}.nav button:hover,.nav button.active{background:#e8f7f2!important;color:#087a61!important}
+.main{background:#f5f7fa!important}.top{background:#fff!important;border-bottom:1px solid #e1e7ec!important}.content{background:#f5f7fa!important}
+.card,.panel,.education-item,.research-item,.equity-item{background:#fff!important;border-color:#dfe5eb!important;box-shadow:0 2px 8px rgba(30,50,70,.04)}
+.table th{color:#64748b!important}.table th,.table td,.watch{border-color:#e5e9ee!important}
+.label,.sub,.contact-note,.greeting-sub,.education-meta,.research-category,.equity-count,.research-count,.education-id{color:#64748b!important}
+.value,.title,.greeting,.panel h3,.education-title,.research-title{color:#17212b!important}
+.action,.social-btn,.research-tab,.eq-tab,.research-open,.photo-btn,.legal-close{background:#fff!important;border-color:#cfd8e1!important;color:#263746!important}
+.action:hover,.research-item:hover{background:#f1f5f8!important}
+.primary{background:#18b98d!important;color:#fff!important}
+.form input,.form textarea,.research-search,.equity-search{background:#fff!important;border-color:#cfd8e1!important;color:#17212b!important}
+.equity-search input{color:#17212b!important}.pill{background:#e2f8f1!important;color:#078060!important}
+.legal-overlay,.login-overlay,.utility-overlay{background:rgba(245,247,250,.94)!important}
+.legal-box,.login,.utility-box,.privacy-box{background:#fff!important;border-color:#d9e1e8!important;box-shadow:0 12px 40px rgba(20,35,50,.14)!important}
+.legal-box p,.legal-box li{color:#526273!important}.privacy-box .modal-actions{background:#fff!important}
+.social-btn.truecaller{background:#fff!important;color:#111!important}
+.loading{background:rgba(245,247,250,.78)!important}.loading-box{background:#fff!important;color:#17212b!important;box-shadow:0 10px 30px rgba(20,35,50,.12)}
+.spinner{border-color:#cbd5df!important;border-top-color:#18b98d!important}
+.password-toggle{background:#f3f6f8!important;color:#087a61!important;border-color:#cfd8e1!important}
+.research-tab.active,.eq-tab.active{background:#18b98d!important;color:#fff!important;border-color:#18b98d!important}
+.brand-mark{color:#fff!important}
+.avatar,.big-avatar{background:#dff6ef!important;color:#087a61!important}
+</style>
+</head>
+<body>
+
+<!-- TERMS -->
+<div class="legal-overlay" id="termsModal" role="dialog" aria-modal="true">
+  <div class="legal-box">
+    <button class="legal-close" type="button" onclick="closeLegal()">Close</button>
+    <h2>AlphaEdge Terms &amp; Conditions</h2>
+
+    <h3>1. Acceptance and Eligibility</h3>
+    <p>By accessing AlphaEdge, creating an account, or using any feature made available through the website, you acknowledge that you have read and understood these Terms &amp; Conditions and agree to be bound by them. You should use the service only where you are legally permitted to do so and should provide information that is accurate, current, and complete.</p>
+
+    <h3>2. Nature of Information</h3>
+    <p>Information, market observations, educational material, charts, research-style articles, and other content made available through AlphaEdge are provided for general informational and educational purposes. Unless a specific service is expressly identified and lawfully provided as regulated advice, the content should not be treated as a personal recommendation, investment advice, financial advice, legal advice, tax advice, or a guarantee of any particular outcome.</p>
+
+    <h3>3. Market and Investment Risk</h3>
+    <p>Trading and investing in financial markets involve risk. Prices can move rapidly and losses can occur, including loss of a substantial part or all of the capital committed to a transaction. Past performance, historical examples, simulations, projections, or market commentary do not guarantee future results. You are responsible for evaluating whether a product or transaction is appropriate for your circumstances and for obtaining independent professional advice where required.</p>
+
+    <h3>4. Account Registration and Security</h3>
+    <p>You are responsible for providing truthful registration details and for keeping your Client ID, password, recovery information, and other credentials confidential. Do not share credentials with another person or permit unauthorized access to your account. If you believe that your credentials have been compromised, you should use the available recovery process and contact the appropriate support channel without delay.</p>
+
+    <h3>5. Acceptable Use</h3>
+    <p>You agree not to misuse the website, attempt unauthorized access, interfere with its operation, submit malicious code, impersonate another person or organization, or use the service for unlawful activity. Account information must not be created, transferred, or used for another person in a manner that violates applicable law or the rights of others.</p>
+
+    <h3>6. Accuracy and Availability</h3>
+    <p>Reasonable efforts may be made to keep information available and accurate, but market data, third-party information, technical services, and website features can contain delays, omissions, interruptions, or errors. AlphaEdge may update, suspend, restrict, or discontinue features when reasonably necessary for maintenance, security, compliance, or operational reasons.</p>
+
+    <h3>7. Third-Party Services and Links</h3>
+    <p>The website may contain links, integrations, or references to third-party services. Such services may operate under their own terms and privacy policies. AlphaEdge is not responsible for the independent content, availability, security, or practices of third-party services unless expressly stated otherwise.</p>
+
+    <h3>8. Regulatory and Legal Disclosures</h3>
+    <p>Where regulatory registration, authorization, product disclosures, risk disclosures, or other legal information is required, the applicable legal entity and verified regulatory information should be relied upon from the official disclosures published for that entity. Nothing in these Terms should be interpreted as creating a regulatory status, authorization, or representation that has not been independently verified and lawfully established.</p>
+
+    <h3>9. Privacy and Records</h3>
+    <p>Personal information is handled according to the applicable Privacy Policy. You should review that policy before using the service. Records relating to account activity may be retained where necessary for security, operational, legal, regulatory, or dispute-resolution purposes, subject to applicable requirements.</p>
+
+    <h3>10. Changes and Governing Requirements</h3>
+    <p>These Terms may be updated when the website, services, legal requirements, or operational practices change. Updated terms become effective as stated when published. If any provision is found unenforceable, the remaining provisions will continue to operate to the extent permitted by law. Your use of AlphaEdge after an applicable update constitutes acceptance of the updated Terms.</p>
+
+    <h3>11. User Responsibility</h3>
+    <p>You remain responsible for your decisions, transactions, account activity, and compliance with laws applicable to you. Before acting on financial information, consider your objectives, risk tolerance, financial circumstances, and the possibility of loss.</p>
+
+    <div class="modal-actions">
+      <button class="primary" type="button" onclick="acceptLegal('terms')">I Accept</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRIVACY -->
+<div class="legal-overlay" id="privacyModal" role="dialog" aria-modal="true">
+  <div class="legal-box privacy-box">
+    <button class="legal-close" type="button" onclick="closeLegal()">Close</button>
+    <h2>AlphaEdge Privacy Policy</h2>
+    <p>This Privacy Policy explains what information AlphaEdge may collect, how it may be used within the application, and how locally stored information is handled. By using AlphaEdge, you acknowledge this policy.</p>
+
+    <h3>1. Information We Store</h3>
+    <p>Information entered into the application, such as name, mobile number, email address, Client ID and profile information, may be stored locally in your browser to support account, profile and application functionality.</p>
+
+    <h3>2. Account Information</h3>
+    <p>Information associated with registration or login may be used to identify your account, provide access to the application, maintain your profile and support account-related requests.</p>
+
+    <h3>3. Profile Information</h3>
+    <p>Profile details and optional profile information, including a profile photo selected by you, may be stored locally on your device so the application can display your profile consistently.</p>
+
+    <h3>4. Use of Information</h3>
+    <p>Information may be used to provide login, registration, profile, educational, research, market-information and application features, and to maintain the security and operation of the service.</p>
+
+    <h3>5. Local Storage</h3>
+    <p>AlphaEdge may use browser local storage for application preferences and account-related information. Clearing browser storage, changing browser settings, or using a different browser or device may remove locally stored information.</p>
+
+    <h3>6. Market and Educational Features</h3>
+    <p>Market information, research material and educational modules are provided for general informational and educational purposes. Such content should not be treated as personalised financial, investment, legal or tax advice.</p>
+
+    <h3>7. Third-Party Services</h3>
+    <p>The application may connect to external services, market-data providers, communication services. Those services may have their own privacy policies and terms. AlphaEdge does not control the independent privacy practices of third-party services.</p>
+
+    <h3>8. Security</h3>
+    <p>Reasonable technical and operational measures may be used to protect information and application functionality. No method of electronic storage or transmission can be guaranteed to be completely secure.</p>
+
+    <h3>9. Data Retention</h3>
+    <p>Information may be retained for as long as reasonably necessary for account functionality, security, operational requirements, dispute resolution, or applicable legal and regulatory requirements.</p>
+
+    <h3>10. Your Choices</h3>
+    <p>You may review or update information available through your profile features. You may also clear locally stored browser data, although doing so may remove information required for application preferences or profile display.</p>
+
+    <h3>11. Policy Updates</h3>
+    <p>This Privacy Policy may be updated when the application, services, legal requirements or operational practices change. The updated version will apply from the date it is published or otherwise made available.</p>
+
+    <h3>12. Contact</h3>
+    <p>For privacy-related questions or account concerns, use the Contact Us facility available inside the AlphaEdge application.</p>
+
+    <div class="modal-actions"><button class="primary" type="button" onclick="acceptLegal('privacy')">I Accept</button></div>
+  </div>
+</div>
+
+<!-- FORGOT CLIENT ID -->
+<div class="utility-overlay" id="forgotClientModal" role="dialog" aria-modal="true">
+  <div class="utility-box">
+    <button class="legal-close" type="button" onclick="closeUtility()">Close</button>
+    <h2 class="modal-title">Recover Client ID</h2>
+    <p class="contact-note">Enter your registered mobile number or email.</p>
+    <form class="form" id="forgotClientForm">
+      <label>Mobile / Email *<input id="forgotClientContact" required autocomplete="email"></label>
+      <div class="error" id="forgotClientError"></div>
+      <div class="success" id="forgotClientSuccess"></div>
+      <div class="modal-actions">
+        <button class="action" type="button" onclick="closeUtility()">Cancel</button>
+        <button class="primary" type="submit">Recover Client ID</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD -->
+<div class="utility-overlay" id="forgotPasswordModal" role="dialog" aria-modal="true">
+  <div class="utility-box">
+    <button class="legal-close" type="button" onclick="closeUtility()">Close</button>
+    <h2 class="modal-title">Reset Password</h2>
+    <p class="contact-note">Enter your Client ID and registered contact details.</p>
+    <form class="form" id="forgotPasswordForm">
+      <label>Client ID *<input id="resetClientId" placeholder="e.g. AE100001" required></label>
+      <label>Registered Mobile / Email *<input id="resetContact" required></label>
+      <label>New Password *<input id="resetPassword" type="password" minlength="8" required></label>
+      <div class="contact-note">Minimum 8 characters, 1 uppercase, 1 number and 1 special character (@/#/₹).</div>
+      <div class="error" id="forgotPasswordError"></div>
+      <div class="success" id="forgotPasswordSuccess"></div>
+      <div class="modal-actions">
+        <button class="action" type="button" onclick="closeUtility()">Cancel</button>
+        <button class="primary" type="submit">Reset Password</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- LOGIN / REGISTER -->
+<div class="login-overlay" id="loginScreen">
+  <div class="login">
+    <div class="brand-logo" aria-label="AlphaEdge">
+      <div class="brand-mark">AE</div>
+      <div class="brand-name">Alpha<span>Edge</span></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:22px">
+      <button class="action" id="loginTab" type="button" onclick="switchAuth('login')" style="flex:1;background:#28d5a0;color:#06131b">Login</button>
+      <button class="action" id="registerTab" type="button" onclick="switchAuth('register')" style="flex:1">Register</button>
+    </div>
+
+    <div id="loginPanel">
+      <h2>Welcome back</h2>
+      <p class="contact-note">Login to your AlphaEdge workspace</p>
+      <form class="form" id="loginForm">
+        <label>Client ID *<input id="loginClientId" placeholder="e.g. AE100001" required autocomplete="username"></label>
+        <label>Password *<input id="loginPassword" type="password" minlength="8" required autocomplete="current-password"></label>
+        <div style="display:flex;justify-content:space-between;gap:12px">
+          <button type="button" class="legal-link" onclick="openForgotClient()">Forgot Client ID?</button>
+          <button type="button" class="legal-link" onclick="openForgotPassword()">Forgot Password?</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:#9aafc0;cursor:pointer;margin-top:2px">
+          <input id="rememberMe" type="checkbox" style="width:20px;height:20px;accent-color:#28d5a0;cursor:pointer">
+          <span>Remember me</span>
+        </label>
+        <label class="terms">
+          <input id="terms" type="checkbox" aria-label="Terms and Privacy accepted">
+          <span>I agree to the
+            <button type="button" class="legal-link" onclick="openLegal('termsModal')">Terms &amp; Conditions</button>
+            and
+            <button type="button" class="legal-link" onclick="openLegal('privacyModal')">Privacy Policy</button>.
+          </span>
+        </label>
+        <div class="error" id="loginError"></div>
+        <button class="primary" style="width:100%" type="submit">Login</button>
+        <div class="social-divider"><span>OR</span></div>
+        <div class="social-row">
+          <button class="social-btn truecaller" type="button" onclick="startSocialLogin('truecaller')">Continue with Truecaller</button>
+        </div>
+      </form>
+      <p style="text-align:center;font-size:11px;color:#8296a9">
+        New to AlphaEdge?
+        <a href="#" onclick="switchAuth('register');return false" style="color:#55dcb8">Create an account</a>
+      </p>
+    </div>
+
+    <div id="registerPanel" style="display:none">
+      <h2>Create your account</h2>
+      <p class="contact-note">Register using your mobile number and email ID.</p>
+      <form class="form" id="registerForm">
+        <label>Full Name *<input id="regName" type="text" maxlength="100" required autocomplete="name"></label>
+        <label>Mobile Number *<input id="regMobile" type="tel" inputmode="numeric" maxlength="10" required autocomplete="tel"></label>
+        <label>Email ID *<input id="regEmail" type="email" required autocomplete="email"></label>
+        <label class="terms">
+          <input id="regTerms" type="checkbox" aria-label="Terms and Privacy accepted">
+          <span>I agree to the <button type="button" class="legal-link" onclick="openLegal('termsModal')">Terms &amp; Conditions</button> and <button type="button" class="legal-link" onclick="openLegal('privacyModal')">Privacy Policy</button>.</span>
+        </label>
+        <div class="error" id="registerError"></div>
+        <div class="success" id="registerSuccess"></div>
+        <button class="primary" style="width:100%" type="submit">Create Account</button>
+        <div class="social-divider"><span>OR</span></div>
+        <div class="social-row">
+          <button class="social-btn truecaller" type="button" onclick="startSocialLogin('truecaller')">Continue with Truecaller</button>
+        </div>
+      </form>
+      <p style="text-align:center;font-size:11px">
+        <a href="#" onclick="switchAuth('login');return false" style="color:#55dcb8">Login here</a>
+      </p>
+    </div>
+
+    <div id="authDisclaimer" style="text-align:center;color:#71879b;font-size:9px;line-height:1.6;margin-top:14px">
+      <b>Disclaimer:</b> AlphaEdge provides market information and educational content for general informational purposes only. It is not investment, financial, legal, or tax advice. Trading and investing involve risk, and past performance does not guarantee future results.
+      <br>© <span id="footerYear"></span> AlphaEdge. All rights reserved.
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app">
+  <aside class="side">
+    <div class="logo">Alpha<span>Edge</span></div>
+    <nav class="nav">
+      <button class="active" data-page="dashboard">Dashboard</button>
+      <button data-page="market">Market</button>
+      <button data-page="watchlist">Watchlist</button>
+      <button data-page="equityHub">Equity Hub</button>
+      <button data-page="research">Research</button>
+      <button data-page="education">Education</button>
+      <button data-page="profile">Profile</button>
+      <button data-page="contact">Contact Us</button>
+      <button id="logout" class="logout">Logout</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+
+    <div class="content">
+      <section class="page active" id="dashboard">
+        <div class="greeting" id="greetingTitle">Good Evening</div>
+        <div class="greeting-sub">Welcome to your AlphaEdge dashboard.</div>
+        <div class="cards">
+          <div class="card"><div class="label">Nifty 50</div><div class="value" id="dashNiftyValue">--</div><div id="dashNiftyChange" class="up">--</div></div>
+          <div class="card"><div class="label">Sensex</div><div class="value" id="dashSensexValue">--</div><div id="dashSensexChange" class="up">--</div></div>
+          <div class="card"><div class="label">Bank Nifty</div><div class="value" id="dashBankValue">--</div><div id="dashBankChange" class="up">--</div></div>
+          <div class="card"><div class="label">Watchlist</div><div class="value">3</div><div class="sub">Tracked symbols</div></div>
+        </div>
+
+        <div class="row">
+          <div class="panel">
+            <h3>Market Trend</h3>
+            <div class="chart">
+              <svg viewBox="0 0 600 250" preserveAspectRatio="none">
+                <path id="marketChartLine" d="M0 210 L600 210" fill="none" stroke="#2ed6a0" stroke-width="5"/>
+                <path id="marketChartArea" d="M0 210 L600 210 L600 250 L0 250Z" fill="#2ed6a0" opacity=".08"/>
+              </svg>
+            </div>
+            <div class="contact-note">● <span id="marketChartTime">Waiting for market data...</span></div>
+          </div>
+          <div class="panel">
+            <h3>Watchlist</h3>
+            <div id="miniWatch"></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:12px">
+          <h3>Research Centre</h3>
+          <table class="table">
+            <tr><th>Topic</th><th>Status</th><th></th></tr>
+            <tr><td>Understanding Market Trends</td><td><span class="pill">Available</span></td><td><button class="action" type="button" onclick="openResearch('trends')">Open</button></td></tr>
+            <tr><td>Risk Management Framework</td><td><span class="pill">Available</span></td><td><button class="action" type="button" onclick="openResearch('risk')">Open</button></td></tr>
+            <tr><td>Technical Analysis Basics</td><td><span class="pill">Available</span></td><td><button class="action" type="button" onclick="openResearch('technical')">Open</button></td></tr>
+          </table>
+        </div>
+      </section>
+
+      <section class="page" id="market">
+        <div class="panel">
+          <h3>Market Overview</h3>
+          <div class="cards">
+            <div class="card"><div class="label">Nifty 50</div><div class="value" id="marketNiftyValue">--</div><div id="marketNiftyChange" class="up">--</div></div>
+            <div class="card"><div class="label">Sensex</div><div class="value" id="marketSensexValue">--</div><div id="marketSensexChange" class="up">--</div></div>
+            <div class="card"><div class="label">Bank Nifty</div><div class="value" id="marketBankValue">--</div><div id="marketBankChange" class="up">--</div></div>
+          </div>
+          <p class="contact-note">Backend feed: <b id="marketFeedStatus">CHECKING...</b></p>
+        </div>
+      </section>
+
+      <section class="page" id="watchlist"><div class="panel"><h3>Popular Companies — Live</h3><p class="contact-note">Live prices from the connected market feed.</p><input id="watchSearch" class="watch-search" type="search" placeholder="Search company or symbol..." autocomplete="off" aria-label="Search companies"><div id="fullWatch"></div></div></section>
+      <section class="page" id="equityHub">
+        <div class="panel equity-panel">
+          <div class="equity-head">
+            <div>
+              <h3>Equity Hub</h3>
+              <p class="contact-note">NSE • BSE • NIFTY 50 • SENSEX • NIFTY BANK</p>
+            </div>
+            <div class="equity-count" id="equityCount"></div>
+          </div>
+          <div class="equity-search">
+            <span>⌕</span>
+            <input id="equitySearch" type="search" placeholder="Search company or symbol..." autocomplete="off">
+          </div>
+          <div class="equity-tabs" id="equityTabs">
+            <button class="eq-tab active" data-filter="all">All</button>
+            <button class="eq-tab" data-filter="NSE">NSE</button>
+            <button class="eq-tab" data-filter="BSE">BSE</button>
+            <button class="eq-tab" data-filter="NIFTY50">Nifty 50</button>
+            <button class="eq-tab" data-filter="SENSEX">Sensex</button>
+            <button class="eq-tab" data-filter="BANKNIFTY">Bank Nifty</button>
+          </div>
+          <div class="equity-list" id="equityList"></div>
+        </div>
+      </section>
+      <section class="page" id="equityDetail">
+        <div class="panel equity-detail-panel">
+          <button class="action" type="button" onclick="showPage('equityHub')">← Back to Equity Hub</button>
+          <div id="equityDetailContent" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <section class="page" id="research">
+        <div class="panel research-panel">
+          <div class="equity-head">
+            <div>
+              <h3>Research Centre</h3>
+              <p class="contact-note">500 educational research topics — market, investing, economics and trading concepts.</p>
+            </div>
+            <div class="research-count" id="researchCount">500 topics</div>
+          </div>
+          <div class="research-toolbar">
+            <input id="researchSearch" class="research-search" type="search" placeholder="Search research topic..." autocomplete="off">
+          </div>
+          <div class="research-tabs" id="researchTabs"></div>
+          <div class="research-list" id="researchList"></div>
+        </div>
+      </section>
+
+      <section class="page" id="article"><div class="panel" id="articleContent"></div></section>
+
+      <section class="page" id="education">
+        <div class="panel education-panel">
+          <div class="education-head">
+            <div>
+              <h3>AlphaEdge Education Library</h3>
+              <p class="contact-note">600 educational modules across markets, analysis, risk, derivatives, portfolio management and research.</p>
+            </div>
+            <div class="research-count" id="educationCount">600 Modules</div>
+          </div>
+          <div class="education-toolbar">
+            <input id="educationSearch" class="research-search" type="search" placeholder="Search education module..." autocomplete="off">
+          </div>
+          <div class="education-list" id="educationList"></div>
+        </div>
+      </section>
+
+      <section class="page" id="profile">
+        <div class="panel profilebox">
+          <h3>My Profile</h3>
+          <div class="profile-photo">
+            <div class="big-avatar" id="profileAvatar">AE</div>
+            <label class="photo-btn">Choose Photo<input id="profilePhoto" type="file" accept="image/*" style="display:none"></label>
+          </div>
+          <form class="form" id="profileForm">
+            <label>Full Name *<input id="profileName" required></label>
+            <label>Mobile Number *<input id="profileMobile" maxlength="10" required></label>
+            <label>Email ID *<input id="profileEmail" type="email" required></label>
+            <label>New Password<div class="password-field"><input id="profilePassword" type="password" autocomplete="new-password"><button type="button" class="password-toggle visible" onclick="togglePassword('profilePassword',this)" aria-label="Show password">◉</button></div></label>
+            <button class="primary" type="submit">Save Changes</button>
+            <div class="success" id="profileSuccess"></div>
+            <div class="error" id="profileError"></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="page" id="contact">
+        <div class="panel profilebox">
+          <h3>Contact AlphaEdge</h3>
+          <p class="contact-note">Submit the form to continue to WhatsApp.</p>
+          <form class="form" id="contactForm">
+            <label>Name *<input id="contactName" required></label>
+            <label>Mobile Number *<input id="contactMobile" maxlength="10" required></label>
+            <label>Email ID *<input id="contactEmail" type="email" required></label>
+            <label>Message *<textarea id="contactMessage" required></textarea></label>
+            <button class="primary" type="submit">Submit &amp; Continue to WhatsApp</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="loading" id="loading">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingText">Please wait...</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const API_BASE="https://alphaedge-backend-loxi.onrender.com";
+const WHATSAPP_NUMBER="917237868633";
+
+const $ = id => document.getElementById(id);
+
+async function apiFetch(path, options={}){
+  const o={...options,headers:{...(options.headers||{})}};
+  if(o.body && typeof o.body!=="string" && !(o.body instanceof FormData)){
+    o.headers["Content-Type"]="application/json";
+    o.body=JSON.stringify(o.body);
+  }
+
+  const authToken=localStorage.getItem("alphaedge_auth_token");
+  if(authToken) o.headers["Authorization"]="Bearer "+authToken;
+  const response=await fetch(API_BASE+path,{...o,credentials:"include"});
+  const contentType=(response.headers.get("content-type")||"").toLowerCase();
+  const raw=await response.text();
+
+  let data=null;
+  if(raw){
+    if(contentType.includes("application/json")){
+      try{ data=JSON.parse(raw); }
+      catch(_){ data={success:false,message:"Server returned invalid JSON."}; }
+    }else{
+      const looksHtml=/^\s*<!doctype html|^\s*<html[\s>]/i.test(raw);
+      data={
+        success:false,
+        message:looksHtml
+          ? `API endpoint returned HTML instead of JSON (${response.status}). Check the backend URL.`
+          : `Server returned an unexpected response (${response.status}).`
+      };
+    }
+  }
+
+  if(!response.ok){
+    const err=new Error(data?.message||`Request failed (${response.status})`);
+    err.status=response.status;
+    err.data=data;
+    throw err;
+  }
+
+  response.data=data||{};
+  response.json=async()=>data||{};
+  return response;
+}
+
+/* WATCHLIST — restored company data + search */
+const popularSymbols=[
+  ["RELIANCE", "Reliance Industries", "reliance"],
+  ["TCS", "TCS", "tcs"],
+  ["HDFCBANK", "HDFC Bank", "hdfcbank"],
+  ["ICICIBANK", "ICICI Bank", "icicibank"],
+  ["SBIN", "State Bank of India", "sbin"],
+  ["BHARTIARTL", "Bharti Airtel", "airtel"],
+  ["LT", "Larsen & Toubro", "lt"],
+  ["AXISBANK", "Axis Bank", "axisbank"],
+  ["KOTAKBANK", "Kotak Mahindra Bank", "kotakbank"],
+  ["INFY", "Infosys", "infy"],
+  ["HINDUNILVR", "Hindustan Unilever", "hindunilvr"],
+  ["ITC", "ITC", "itc"],
+  ["MARUTI", "Maruti Suzuki India", "maruti"],
+  ["M&M", "Mahindra & Mahindra", "mandm"],
+  ["SUNPHARMA", "Sun Pharma", "sunpharma"],
+  ["TITAN", "Titan Company", "titan"],
+  ["BAJFINANCE", "Bajaj Finance", "bajfinance"],
+  ["HCLTECH", "HCLTech", "hcltech"],
+  ["KOTAKBANK", "Kotak Mahindra Bank", "kotakbank2"],
+  ["WIPRO", "Wipro", "wipro"],
+  ["ADANIENT", "Adani Enterprises", "adanient"],
+  ["ADANIPORTS", "Adani Ports", "adaniports"],
+  ["NTPC", "NTPC", "ntpc"],
+  ["POWERGRID", "Power Grid Corp", "powergrid"],
+  ["ONGC", "ONGC", "ongc"],
+  ["COALINDIA", "Coal India", "coalindia"],
+  ["TATASTEEL", "Tata Steel", "tatasteel"],
+  ["JSWSTEEL", "JSW Steel", "jswsteel"],
+  ["HINDALCO", "Hindalco Industries", "hindalco"],
+  ["TECHM", "Tech Mahindra", "techm"],
+  ["ULTRACEMCO", "UltraTech Cement", "ultracemco"],
+  ["NESTLEIND", "Nestle India", "nestleind"],
+  ["ASIANPAINT", "Asian Paints", "asianpaint"],
+  ["BAJAJFINSV", "Bajaj Finserv", "bajajfinsv"],
+  ["BAJAJ-AUTO", "Bajaj Auto", "bajajauto"],
+  ["HEROMOTOCO", "Hero MotoCorp", "heromotoco"],
+  ["EICHERMOT", "Eicher Motors", "eichermot"],
+  ["DRREDDY", "Dr Reddy’s Laboratories", "drreddy"],
+  ["CIPLA", "Cipla", "cipla"],
+  ["DIVISLAB", "Divi’s Laboratories", "divislab"],
+  ["APOLLOHOSP", "Apollo Hospitals", "apollohosp"],
+  ["TATAMOTORS", "Tata Motors", "tatamotors"],
+  ["TATACONSUM", "Tata Consumer Products", "tataconsum"],
+  ["TATAPOWER", "Tata Power", "tatapower"],
+  ["TATAELXSI", "Tata Elxsi", "tataelxsi"],
+  ["TRENT", "Trent", "trent"],
+  ["BEL", "Bharat Electronics", "bel"],
+  ["HAL", "Hindustan Aeronautics", "hal"],
+  ["BHEL", "BHEL", "bhel"],
+  ["IRFC", "Indian Railway Finance", "irfc"],
+  ["IRCTC", "IRCTC", "irctc"],
+  ["RVNL", "Rail Vikas Nigam", "rvnl"],
+  ["IOC", "Indian Oil", "ioc"],
+  ["BPCL", "Bharat Petroleum", "bpcl"],
+  ["GAIL", "GAIL India", "gail"],
+  ["HINDPETRO", "Hindustan Petroleum", "hindpetro"],
+  ["DLF", "DLF", "dlf"],
+  ["GODREJPROP", "Godrej Properties", "godrejprop"],
+  ["PIDILITIND", "Pidilite Industries", "pidilitind"],
+  ["DABUR", "Dabur India", "dabur"],
+  ["MARICO", "Marico", "marico"],
+  ["COLPAL", "Colgate-Palmolive India", "colpal"],
+  ["BRITANNIA", "Britannia Industries", "britannia"],
+  ["MCDOWELL-N", "United Spirits", "mcdowell"],
+  ["VBL", "Varun Beverages", "vbl"],
+  ["DMART", "Avenue Supermarts", "dmart"],
+  ["ZOMATO", "Zomato", "zomato"],
+  ["PAYTM", "One 97 Communications", "paytm"],
+  ["DELHIVERY", "Delhivery", "delhivery"],
+  ["INDIGO", "InterGlobe Aviation", "indigo"],
+  ["ADANIGREEN", "Adani Green Energy", "adanigreen"],
+  ["ADANIPOWER", "Adani Power", "adanipower"],
+  ["AMBUJACEM", "Ambuja Cements", "ambujacem"],
+  ["ACC", "ACC", "acc"],
+  ["SHREECEM", "Shree Cement", "shreecem"],
+  ["GRASIM", "Grasim Industries", "grasim"],
+  ["VEDL", "Vedanta", "vedl"],
+  ["SAIL", "Steel Authority of India", "sail"],
+  ["NMDC", "NMDC", "nmdc"],
+  ["JINDALSTEL", "Jindal Steel & Power", "jindalstel"],
+  ["HAVELLS", "Havells India", "havells"],
+  ["VOLTAS", "Voltas", "voltas"],
+  ["CROMPTON", "Crompton Greaves Consumer", "crompton"],
+  ["DIXON", "Dixon Technologies", "dixon"],
+  ["POLYCAB", "Polycab India", "polycab"],
+  ["BOSCHLTD", "Bosch", "boschltd"],
+  ["MOTHERSON", "Samvardhana Motherson", "motherson"],
+  ["MUTHOOTFIN", "Muthoot Finance", "muthootfin"],
+  ["CHOLAFIN", "Cholamandalam Investment", "cholafin"],
+  ["SHRIRAMFIN", "Shriram Finance", "shriramfin"],
+  ["BAJAJHLDNG", "Bajaj Holdings & Investment", "bajajhldng"],
+  ["BANKBARODA", "Bank of Baroda", "bankbaroda"],
+  ["PNB", "Punjab National Bank", "pnb"],
+  ["CANBK", "Canara Bank", "canbk"],
+  ["UNIONBANK", "Union Bank of India", "unionbank"],
+  ["INDUSINDBK", "IndusInd Bank", "indusindbk"],
+  ["IDFCFIRSTB", "IDFC First Bank", "idfcfirstb"],
+  ["FEDERALBNK", "Federal Bank", "federalbnk"],
+  ["BANDHANBNK", "Bandhan Bank", "bandhanbnk"],
+  ["RBLBANK", "RBL Bank", "rblbank"],
+  ["LICI", "Life Insurance Corporation of India", "lici"],
+  ["SBILIFE", "SBI Life Insurance", "sbilife"],
+  ["HDFCLIFE", "HDFC Life Insurance", "hdfclife"],
+  ["ICICIGI", "ICICI Lombard General Insurance", "icicigi"],
+  ["ICICIPRULI", "ICICI Prudential Life Insurance", "icicipruli"],
+  ["MAXHEALTH", "Max Healthcare", "maxhealth"],
+  ["FORTIS", "Fortis Healthcare", "fortis"],
+  ["LUPIN", "Lupin", "lupin"],
+  ["AUROPHARMA", "Aurobindo Pharma", "auropharma"],
+  ["TORNTPHARM", "Torrent Pharmaceuticals", "torrentpharm"],
+  ["ALKEM", "Alkem Laboratories", "alkem"],
+  ["BIOCON", "Biocon", "biocon"],
+  ["ZYDUSLIFE", "Zydus Lifesciences", "zyduslife"],
+  ["MANKIND", "Mankind Pharma", "mankind"],
+  ["SRF", "SRF", "srf"],
+  ["UPL", "UPL", "upl"],
+  ["PIIND", "PI Industries", "piind"],
+  ["COROMANDEL", "Coromandel International", "coromandel"],
+  ["CUMMINSIND", "Cummins India", "cumminsind"],
+  ["ABB", "ABB India", "abb"]
+];
+const watchData=Object.fromEntries(popularSymbols.map(x=>[x[2],null]));
+function renderWatch(){
+  const q=($("watchSearch")?.value||"").trim().toLowerCase();
+  const filtered=popularSymbols.filter(([sym,name])=>!q || sym.toLowerCase().includes(q) || name.toLowerCase().includes(q));
+  const html=filtered.map(([sym,name,key])=>{
+    const d=watchData[key];
+    const price=fmtPrice(d?.ltp);
+    const pct=fmtPct(d?.changePct);
+    const cls=Number(d?.changePct)>=0?"up":"down";
+    const safeSym=encodeURIComponent(sym);
+    return `<div class="watch watch-clickable" role="button" tabindex="0" onclick="openWatchEquity('${safeSym}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openWatchEquity('${safeSym}')}">
+      <span><b>${name}</b><small style="display:block;color:#71879b">${sym}</small></span>
+      <span style="text-align:right"><b>${price}</b><small class="${cls}" style="display:block">${pct}</small></span>
+    </div>`;
+  }).join("");
+  $("miniWatch").innerHTML=html;
+  $("fullWatch").innerHTML=html || `<div class="watch-empty">No company found.</div>`;
+}
+renderWatch();
+$("watchSearch")?.addEventListener("input",renderWatch);
+
+function openWatchEquity(encodedSymbol){
+  const symbol=decodeURIComponent(encodedSymbol||"");
+  if(typeof openEquity==="function") openEquity(symbol);
+}
+
+function fmtPrice(v){
+  return Number.isFinite(Number(v))
+    ? Number(v).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2})
+    : "--";
+}
+function fmtPct(v){
+  return Number.isFinite(Number(v))
+    ? (Number(v)>=0?"+":"")+Number(v).toFixed(2)+"%"
+    : "--";
+}
+function card(prefix,d){
+  const v=$(prefix+"Value"), c=$(prefix+"Change");
+  if(v)v.textContent=fmtPrice(d?.ltp);
+  if(c){
+    c.textContent=fmtPct(d?.changePct);
+    c.className=Number(d?.changePct)>=0?"up":"down";
+  }
+}
+function updateMarketUI(d){
+  if(!d)return;
+  card("dashNifty",d.nifty);
+  card("dashSensex",d.sensex);
+  card("dashBank",d.banknifty);
+  card("marketNifty",d.nifty);
+  card("marketSensex",d.sensex);
+  card("marketBank",d.banknifty);
+
+  $("marketFeedStatus").textContent=d.connected?"CONNECTED":"DISCONNECTED";
+
+  popularSymbols.forEach(([sym,name,key])=>{ if(d[key]) watchData[key]=d[key]; });
+  renderWatch();
+
+  if(d.nifty?.ltp) updateChart(d.nifty.ltp);
+}
+const history=[];
+function updateChart(v){
+  const n=Number(v);
+  if(!Number.isFinite(n))return;
+  history.push(n);
+  if(history.length>30)history.shift();
+  const pts=history.slice(-14);
+  const min=Math.min(...pts),max=Math.max(...pts),range=max-min||1;
+  const xy=pts.map((x,i)=>`${i/(Math.max(1,pts.length-1))*600} ${210-(x-min)/range*175}`).join(" L");
+  $("marketChartLine").setAttribute("d","M"+xy);
+  $("marketChartArea").setAttribute("d","M"+xy+" L600 250 L0 250Z");
+  $("marketChartTime").textContent="Live • "+new Date().toLocaleTimeString("en-IN",{timeZone:"Asia/Kolkata"});
+}
+async function loadMarket(){
+  try{
+    const r=await apiFetch("/api/market",{cache:"no-store"});
+    if(!r.ok)throw new Error("Market unavailable");
+    updateMarketUI(await r.json());
+  }catch(e){
+    $("marketFeedStatus").textContent="UNAVAILABLE";
+  }
+}
+loadMarket();
+setInterval(loadMarket,5000);
+
+try{
+  const es=new EventSource(API_BASE+"/api/market-stream");
+  es.onmessage=e=>{
+    try{updateMarketUI(JSON.parse(e.data));}catch(_){}
+  };
+  es.onerror=()=>{};
+}catch(_){}
+
+/* NAVIGATION */
+function showPage(id){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  $(id)?.classList.add("active");
+  document.querySelectorAll(".nav button[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  const isDashboard=id==="dashboard";
+  document.querySelector(".main")?.classList.toggle("dashboard-view",isDashboard);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll(".nav button[data-page]").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+
+/* GREETING */
+function greeting(){
+  const h=new Date().getHours();
+  const n=localStorage.getItem("alphaedge_name")||"";
+  const g=h>=5&&h<12?"Good Morning":h<17?"Good Afternoon":h<21?"Good Evening":"Good Night";
+  if($("greetingTitle")) $("greetingTitle").textContent=n?g+", "+n:g;
+}
+
+/* LEGAL ACCEPTANCE + PASSWORD CONTROLS */
+let legalAcceptedTerms = false;
+let legalAcceptedPrivacy = false;
+
+function syncLegalCheckboxes(){
+  const accepted=legalAcceptedTerms && legalAcceptedPrivacy;
+  if($("terms")) $("terms").checked=accepted;
+  if($("regTerms")) $("regTerms").checked=accepted;
+}
+
+async function acceptLegal(type){
+  const loading=$("loading");
+  const loadingText=$("loadingText");
+  try{
+    if(loadingText) loadingText.textContent="Saving your acceptance...";
+    if(loading) loading.classList.add("show");
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    if(type==="terms") legalAcceptedTerms=true;
+    if(type==="privacy") legalAcceptedPrivacy=true;
+    syncLegalCheckboxes();
+    closeLegal();
+    const firstField=$("loginClientId");
+    if(firstField && legalReady()) setTimeout(()=>firstField.focus(),50);
+  }catch(err){
+    console.error("Legal acceptance error",err);
+  }finally{
+    if(loading) loading.classList.remove("show");
+    if(loadingText) loadingText.textContent="Please wait...";
+  }
+}
+
+function legalReady(){
+  return legalAcceptedTerms && legalAcceptedPrivacy;
+}
+
+function bindLegalCheckboxes(){
+  [$("terms"), $("regTerms")].forEach(cb=>{
+    if(!cb) return;
+    cb.addEventListener("change",()=>{
+      const accepted=!!cb.checked;
+      legalAcceptedTerms=accepted;
+      legalAcceptedPrivacy=accepted;
+      syncLegalCheckboxes();
+    });
+  });
+}
+
+function loadRememberedLogin(){
+  const remembered=localStorage.getItem("alphaedge_remember_id")==="1";
+  const savedId=localStorage.getItem("alphaedge_remembered_client_id")||"";
+  if($("rememberMe")) $("rememberMe").checked=remembered;
+  if(remembered && savedId && $("loginClientId")) $("loginClientId").value=savedId;
+}
+
+function setupPasswordToggles(){
+  document.querySelectorAll('input[type="password"]').forEach(input=>{
+    if(input.dataset.toggleReady) return;
+    input.dataset.toggleReady="1";
+    const label=input.closest("label");
+    if(!label) return;
+    label.classList.add("password-field");
+
+    const btn=document.createElement("button");
+    btn.type="button";
+    btn.className="password-toggle";
+    btn.setAttribute("aria-label","Show password");
+    btn.title="Show password";
+    btn.textContent="◇";
+
+    const update=()=>{
+      const hasValue=input.value.length>0;
+      btn.classList.toggle("visible",hasValue);
+      if(!hasValue){
+        input.type="password";
+        btn.classList.remove("revealed");
+        btn.textContent="◇";
+        btn.setAttribute("aria-label","Show password");
+        btn.title="Show password";
+      }
+    };
+
+    btn.onclick=()=>{
+      const showing=input.type==="text";
+      input.type=showing?"password":"text";
+      btn.classList.toggle("revealed",!showing);
+      btn.textContent=showing?"◇":"◆";
+      btn.setAttribute("aria-label",showing?"Show password":"Hide password");
+      btn.title=showing?"Show password":"Hide password";
+    };
+
+    label.appendChild(btn);
+    input.addEventListener("input",update);
+    input.addEventListener("change",update);
+    update();
+  });
+}
+
+syncLegalCheckboxes();
+bindLegalCheckboxes();
+setupPasswordToggles();
+switchAuth("login");
+loadRememberedLogin();
+
+/* LEGAL MODALS */
+function openLegal(id){
+  document.querySelectorAll(".legal-overlay").forEach(x=>x.classList.remove("show"));
+  $(id)?.classList.add("show");
+}
+function closeLegal(){
+  document.querySelectorAll(".legal-overlay").forEach(x=>x.classList.remove("show"));
+}
+
+/* UTILITY MODALS */
+function openForgotClient(){
+  $("forgotClientError").style.display="none";
+  $("forgotClientSuccess").style.display="none";
+  $("forgotClientContact").value="";
+  $("forgotClientModal").classList.add("show");
+}
+function openForgotPassword(){
+  $("forgotPasswordError").style.display="none";
+  $("forgotPasswordSuccess").style.display="none";
+  $("resetClientId").value=$("loginClientId").value.trim().toUpperCase();
+  $("resetContact").value="";
+  $("resetPassword").value="";
+  $("forgotPasswordModal").classList.add("show");
+}
+function closeUtility(){
+  document.querySelectorAll(".utility-overlay").forEach(x=>x.classList.remove("show"));
+}
+
+/* AUTH TABS */
+function switchAuth(m){
+  const login=m==="login";
+  $("loginPanel").style.display=login?"block":"none";
+  $("registerPanel").style.display=login?"none":"block";
+  $("loginTab").style.background=login?"#28d5a0":"#102132";
+  $("loginTab").style.color=login?"#06131b":"#dce8f2";
+  $("registerTab").style.background=login?"#102132":"#28d5a0";
+  $("registerTab").style.color=login?"#dce8f2":"#06131b";
+  if($("authDisclaimer")) $("authDisclaimer").style.display=login?"block":"none";
+  setupPasswordToggles();
+}
+
+/* REGISTER */
+$("registerForm").onsubmit=async e=>{
+  e.preventDefault();
+  $("registerError").style.display="none";
+  $("registerSuccess").style.display="none";
+
+  const name=$("regName").value.trim();
+  const mobile=$("regMobile").value.replace(/\D/g,"");
+  const email=$("regEmail").value.trim().toLowerCase();
+
+  if(!name){
+    $("registerError").textContent="Enter your full name.";
+    $("registerError").style.display="block";
+    return;
+  }
+
+  if(!/^\d{10}$/.test(mobile)){
+    $("registerError").textContent="Enter a valid 10-digit mobile number.";
+    $("registerError").style.display="block";
+    return;
+  }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    $("registerError").textContent="Enter a valid email address.";
+    $("registerError").style.display="block";
+    return;
+  }
+  if(!legalReady()){
+    $("registerError").textContent="Please tick the Terms & Conditions and Privacy Policy checkbox.";
+    $("registerError").style.display="block";
+    return;
+  }
+
+  $("loading").classList.add("show");
+  try{
+    const r=await apiFetch("/api/auth/register",{method:"POST",body:{name,mobile,email}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.message||"Registration failed.");
+    const u=d.client||{};
+    const id=d.clientId||u.client_id||u.clientId;
+    localStorage.setItem("alphaedge_logged_in","1");
+    localStorage.setItem("alphaedge_client_id",id||"");
+    localStorage.setItem("alphaedge_name",u.name||"");
+    localStorage.setItem("alphaedge_mobile",u.phone||u.mobile||mobile);
+    localStorage.setItem("alphaedge_email",u.email||email);
+    if(id){
+      $("registerSuccess").innerHTML="Account created successfully. Your Client ID is <b>"+id+"</b>.";
+    }else{
+      $("registerSuccess").textContent="Account created successfully.";
+    }
+    $("registerSuccess").style.display="block";
+    setTimeout(()=>{
+      $("loginScreen").classList.remove("show");
+      greeting();
+      loadProfile();
+    },800);
+  }catch(e){
+    $("registerError").textContent=e.message==="Failed to fetch"?"Backend unavailable. Check the backend service/CORS and try again.":e.message;
+    $("registerError").style.display="block";
+  }finally{
+    $("loading").classList.remove("show");
+  }
+};
+
+/* LOGIN */
+$("loginForm").onsubmit=async e=>{
+  e.preventDefault();
+  $("loginError").style.display="none";
+
+  const id=$("loginClientId").value.trim().toUpperCase();
+  const password=$("loginPassword").value;
+  const remember=!!$("rememberMe")?.checked;
+
+  if(remember){
+    localStorage.setItem("alphaedge_remember_id","1");
+    localStorage.setItem("alphaedge_remembered_client_id",id);
+  }else{
+    localStorage.removeItem("alphaedge_remember_id");
+    localStorage.removeItem("alphaedge_remembered_client_id");
+  }
+
+  if(!/^AE\d{6}$/.test(id)){
+    $("loginError").textContent="Enter a valid Client ID, e.g. AE100001.";
+    $("loginError").style.display="block";
+    return;
+  }
+  if(!legalReady()){
+    $("loginError").textContent="Please tick the Terms & Conditions and Privacy Policy checkbox.";
+    $("loginError").style.display="block";
+    return;
+  }
+
+  $("loading").classList.add("show");
+  try{
+    const r=await apiFetch("/api/auth/login",{method:"POST",body:{clientId:id,password,remember}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.message||"Invalid Client ID or password.");
+    const u=d.client;
+    if(!u)throw new Error("Invalid Client ID or password.");
+
+    const cid=u.client_id||u.clientId;
+    localStorage.setItem("alphaedge_logged_in","1");
+    localStorage.setItem("alphaedge_client_id",cid);
+    localStorage.setItem("alphaedge_name",u.name||"");
+    localStorage.setItem("alphaedge_mobile",u.phone||u.mobile||"");
+    localStorage.setItem("alphaedge_email",u.email||"");
+
+    greeting();
+    $("loginScreen").classList.remove("show");
+    const nextSymbol=pendingEquitySymbol;
+    pendingEquitySymbol=null;
+    if(nextSymbol) setTimeout(()=>openEquity(nextSymbol),0);
+  }catch(e){
+    $("loginError").textContent=e.message==="Failed to fetch"?"Backend unavailable. Check the backend service/CORS and try again.":e.message;
+    $("loginError").style.display="block";
+  }finally{
+    $("loading").classList.remove("show");
+  }
+};
+
+/* FORGOT CLIENT ID */
+$("forgotClientForm").onsubmit=async e=>{
+  e.preventDefault();
+  $("forgotClientError").style.display="none";
+  $("forgotClientSuccess").style.display="none";
+
+  const contact=$("forgotClientContact").value.trim();
+  if(!contact)return;
+
+  try{
+    const r=await apiFetch("/api/auth/forgot-client",{method:"POST",body:{contact}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.message||"No account found.");
+    $("forgotClientSuccess").textContent=d.clientId
+      ? "Your Client ID is "+d.clientId
+      : "Request completed successfully.";
+    $("forgotClientSuccess").style.display="block";
+    if(d.clientId)$("loginClientId").value=d.clientId;
+  }catch(e){
+    $("forgotClientError").textContent=e.message==="Failed to fetch"?"Backend unavailable. Check the backend service/CORS and try again.":e.message;
+    $("forgotClientError").style.display="block";
+  }
+};
+
+/* FORGOT PASSWORD */
+$("forgotPasswordForm").onsubmit=async e=>{
+  e.preventDefault();
+  $("forgotPasswordError").style.display="none";
+  $("forgotPasswordSuccess").style.display="none";
+
+  const clientId=$("resetClientId").value.trim().toUpperCase();
+  const contact=$("resetContact").value.trim();
+  const password=$("resetPassword").value;
+
+  if(!/^AE\d{6}$/.test(clientId)){
+    $("forgotPasswordError").textContent="Enter a valid Client ID, e.g. AE100001.";
+    $("forgotPasswordError").style.display="block";
+    return;
+  }
+  if(password.length<8||!/[A-Z]/.test(password)||!/[0-9]/.test(password)||!/[@#₹]/.test(password)){
+    $("forgotPasswordError").textContent="Password must contain 8+ characters, uppercase, number and special character.";
+    $("forgotPasswordError").style.display="block";
+    return;
+  }
+
+  try{
+    const r=await apiFetch("/api/auth/forgot-password",{method:"POST",body:{clientId,contact,password}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.message||"Password reset failed.");
+    $("forgotPasswordSuccess").textContent="Password reset successfully. You can now login.";
+    $("forgotPasswordSuccess").style.display="block";
+    $("loginClientId").value=clientId;
+    setTimeout(closeUtility,1400);
+  }catch(e){
+    $("forgotPasswordError").textContent=e.message==="Failed to fetch"?"Backend unavailable. Check the backend service/CORS and try again.":e.message;
+    $("forgotPasswordError").style.display="block";
+  }
+};
+
+/* LOGOUT */
+$("logout").onclick=async()=>{
+  const loading=$("loading");
+  const loadingText=$("loadingText");
+  const logoutBtn=$("logout");
+  if(logoutBtn) logoutBtn.disabled=true;
+  try{
+    if(loadingText) loadingText.textContent="Logging out...";
+    if(loading) loading.classList.add("show");
+    const apiLogout=apiFetch("/api/auth/logout",{method:"POST"}).catch(()=>null);
+    await Promise.all([apiLogout,new Promise(resolve=>setTimeout(resolve,1200))]);
+    localStorage.removeItem("alphaedge_logged_in");
+    localStorage.removeItem("alphaedge_client_id");
+    localStorage.removeItem("alphaedge_name");
+    localStorage.removeItem("alphaedge_mobile");
+    localStorage.removeItem("alphaedge_email");
+    localStorage.removeItem("alphaedge_auth_token");
+    $("loginPassword").value="";
+    legalAcceptedTerms=false;
+    legalAcceptedPrivacy=false;
+    syncLegalCheckboxes();
+    $("loginScreen").classList.add("show");
+    switchAuth("login");
+  }finally{
+    if(loading) loading.classList.remove("show");
+    if(loadingText) loadingText.textContent="Please wait...";
+    if(logoutBtn) logoutBtn.disabled=false;
+  }
+};
+
+/* RESEARCH — 500 EDUCATIONAL TOPICS */
+const researchTopics=[{"id":1,"category":"Market Structure & Price Action","title":"Understanding market cycles — using price-action evidence"},{"id":2,"category":"Market Structure & Price Action","title":"Trend continuation and trend exhaustion — using price-action evidence"},{"id":3,"category":"Market Structure & Price Action","title":"Range-bound market behavior — using price-action evidence"},{"id":4,"category":"Market Structure & Price Action","title":"Breakout confirmation — using price-action evidence"},{"id":5,"category":"Market Structure & Price Action","title":"False breakouts — using price-action evidence"},{"id":6,"category":"Market Structure & Price Action","title":"Pullback behavior — using price-action evidence"},{"id":7,"category":"Market Structure & Price Action","title":"Support and resistance zones — using price-action evidence"},{"id":8,"category":"Market Structure & Price Action","title":"Price and volume relationships — using price-action evidence"},{"id":9,"category":"Market Structure & Price Action","title":"Market breadth — using price-action evidence"},{"id":10,"category":"Market Structure & Price Action","title":"Relative strength analysis — using price-action evidence"},{"id":11,"category":"Market Structure & Price Action","title":"Liquidity and bid-ask spreads — using price-action evidence"},{"id":12,"category":"Market Structure & Price Action","title":"Volatility clustering — using price-action evidence"},{"id":13,"category":"Market Structure & Price Action","title":"Moving-average behavior — using price-action evidence"},{"id":14,"category":"Market Structure & Price Action","title":"Momentum indicators — using price-action evidence"},{"id":15,"category":"Market Structure & Price Action","title":"Mean-reversion signals — using price-action evidence"},{"id":16,"category":"Market Structure & Price Action","title":"Candlestick pattern research — using price-action evidence"},{"id":17,"category":"Market Structure & Price Action","title":"Gap behavior — using price-action evidence"},{"id":18,"category":"Market Structure & Price Action","title":"Earnings-event reactions — using price-action evidence"},{"id":19,"category":"Market Structure & Price Action","title":"Corporate announcement reactions — using price-action evidence"},{"id":20,"category":"Market Structure & Price Action","title":"Sector rotation — using price-action evidence"},{"id":21,"category":"Market Structure & Price Action","title":"Revenue growth — using price-action evidence"},{"id":22,"category":"Market Structure & Price Action","title":"Earnings growth — using price-action evidence"},{"id":23,"category":"Market Structure & Price Action","title":"Profit margins — using price-action evidence"},{"id":24,"category":"Market Structure & Price Action","title":"Return on equity — using price-action evidence"},{"id":25,"category":"Market Structure & Price Action","title":"Free cash flow — using price-action evidence"},{"id":26,"category":"Market Structure & Price Action","title":"Debt and balance-sheet strength — using price-action evidence"},{"id":27,"category":"Market Structure & Price Action","title":"Dividend policy — using price-action evidence"},{"id":28,"category":"Market Structure & Price Action","title":"Valuation multiples — using price-action evidence"},{"id":29,"category":"Market Structure & Price Action","title":"Institutional ownership — using price-action evidence"},{"id":30,"category":"Market Structure & Price Action","title":"Promoter ownership — using price-action evidence"},{"id":31,"category":"Market Structure & Price Action","title":"Portfolio diversification — using price-action evidence"},{"id":32,"category":"Market Structure & Price Action","title":"Position sizing — using price-action evidence"},{"id":33,"category":"Market Structure & Price Action","title":"Maximum drawdown — using price-action evidence"},{"id":34,"category":"Market Structure & Price Action","title":"Stress testing — using price-action evidence"},{"id":35,"category":"Market Structure & Price Action","title":"Correlation risk — using price-action evidence"},{"id":36,"category":"Market Structure & Price Action","title":"Behavioral biases — using price-action evidence"},{"id":37,"category":"Market Structure & Price Action","title":"Investor sentiment — using price-action evidence"},{"id":38,"category":"Market Structure & Price Action","title":"Inflation and interest rates — using price-action evidence"},{"id":39,"category":"Market Structure & Price Action","title":"Currency movements — using price-action evidence"},{"id":40,"category":"Market Structure & Price Action","title":"Commodity prices — using price-action evidence"},{"id":41,"category":"Market Structure & Price Action","title":"Foreign institutional flows — using price-action evidence"},{"id":42,"category":"Market Structure & Price Action","title":"Index rebalancing — using price-action evidence"},{"id":43,"category":"Market Structure & Price Action","title":"Open interest — using price-action evidence"},{"id":44,"category":"Market Structure & Price Action","title":"Implied volatility — using price-action evidence"},{"id":45,"category":"Market Structure & Price Action","title":"Option expiry behavior — using price-action evidence"},{"id":46,"category":"Market Structure & Price Action","title":"Market-data quality — using price-action evidence"},{"id":47,"category":"Market Structure & Price Action","title":"Backtest bias — using price-action evidence"},{"id":48,"category":"Market Structure & Price Action","title":"Event-study methodology — using price-action evidence"},{"id":49,"category":"Market Structure & Price Action","title":"ESG disclosure — using price-action evidence"},{"id":50,"category":"Market Structure & Price Action","title":"Corporate governance — using price-action evidence"},{"id":51,"category":"Technical Analysis","title":"Understanding market cycles — using technical indicators and charts"},{"id":52,"category":"Technical Analysis","title":"Trend continuation and trend exhaustion — using technical indicators and charts"},{"id":53,"category":"Technical Analysis","title":"Range-bound market behavior — using technical indicators and charts"},{"id":54,"category":"Technical Analysis","title":"Breakout confirmation — using technical indicators and charts"},{"id":55,"category":"Technical Analysis","title":"False breakouts — using technical indicators and charts"},{"id":56,"category":"Technical Analysis","title":"Pullback behavior — using technical indicators and charts"},{"id":57,"category":"Technical Analysis","title":"Support and resistance zones — using technical indicators and charts"},{"id":58,"category":"Technical Analysis","title":"Price and volume relationships — using technical indicators and charts"},{"id":59,"category":"Technical Analysis","title":"Market breadth — using technical indicators and charts"},{"id":60,"category":"Technical Analysis","title":"Relative strength analysis — using technical indicators and charts"},{"id":61,"category":"Technical Analysis","title":"Liquidity and bid-ask spreads — using technical indicators and charts"},{"id":62,"category":"Technical Analysis","title":"Volatility clustering — using technical indicators and charts"},{"id":63,"category":"Technical Analysis","title":"Moving-average behavior — using technical indicators and charts"},{"id":64,"category":"Technical Analysis","title":"Momentum indicators — using technical indicators and charts"},{"id":65,"category":"Technical Analysis","title":"Mean-reversion signals — using technical indicators and charts"},{"id":66,"category":"Technical Analysis","title":"Candlestick pattern research — using technical indicators and charts"},{"id":67,"category":"Technical Analysis","title":"Gap behavior — using technical indicators and charts"},{"id":68,"category":"Technical Analysis","title":"Earnings-event reactions — using technical indicators and charts"},{"id":69,"category":"Technical Analysis","title":"Corporate announcement reactions — using technical indicators and charts"},{"id":70,"category":"Technical Analysis","title":"Sector rotation — using technical indicators and charts"},{"id":71,"category":"Technical Analysis","title":"Revenue growth — using technical indicators and charts"},{"id":72,"category":"Technical Analysis","title":"Earnings growth — using technical indicators and charts"},{"id":73,"category":"Technical Analysis","title":"Profit margins — using technical indicators and charts"},{"id":74,"category":"Technical Analysis","title":"Return on equity — using technical indicators and charts"},{"id":75,"category":"Technical Analysis","title":"Free cash flow — using technical indicators and charts"},{"id":76,"category":"Technical Analysis","title":"Debt and balance-sheet strength — using technical indicators and charts"},{"id":77,"category":"Technical Analysis","title":"Dividend policy — using technical indicators and charts"},{"id":78,"category":"Technical Analysis","title":"Valuation multiples — using technical indicators and charts"},{"id":79,"category":"Technical Analysis","title":"Institutional ownership — using technical indicators and charts"},{"id":80,"category":"Technical Analysis","title":"Promoter ownership — using technical indicators and charts"},{"id":81,"category":"Technical Analysis","title":"Portfolio diversification — using technical indicators and charts"},{"id":82,"category":"Technical Analysis","title":"Position sizing — using technical indicators and charts"},{"id":83,"category":"Technical Analysis","title":"Maximum drawdown — using technical indicators and charts"},{"id":84,"category":"Technical Analysis","title":"Stress testing — using technical indicators and charts"},{"id":85,"category":"Technical Analysis","title":"Correlation risk — using technical indicators and charts"},{"id":86,"category":"Technical Analysis","title":"Behavioral biases — using technical indicators and charts"},{"id":87,"category":"Technical Analysis","title":"Investor sentiment — using technical indicators and charts"},{"id":88,"category":"Technical Analysis","title":"Inflation and interest rates — using technical indicators and charts"},{"id":89,"category":"Technical Analysis","title":"Currency movements — using technical indicators and charts"},{"id":90,"category":"Technical Analysis","title":"Commodity prices — using technical indicators and charts"},{"id":91,"category":"Technical Analysis","title":"Foreign institutional flows — using technical indicators and charts"},{"id":92,"category":"Technical Analysis","title":"Index rebalancing — using technical indicators and charts"},{"id":93,"category":"Technical Analysis","title":"Open interest — using technical indicators and charts"},{"id":94,"category":"Technical Analysis","title":"Implied volatility — using technical indicators and charts"},{"id":95,"category":"Technical Analysis","title":"Option expiry behavior — using technical indicators and charts"},{"id":96,"category":"Technical Analysis","title":"Market-data quality — using technical indicators and charts"},{"id":97,"category":"Technical Analysis","title":"Backtest bias — using technical indicators and charts"},{"id":98,"category":"Technical Analysis","title":"Event-study methodology — using technical indicators and charts"},{"id":99,"category":"Technical Analysis","title":"ESG disclosure — using technical indicators and charts"},{"id":100,"category":"Technical Analysis","title":"Corporate governance — using technical indicators and charts"},{"id":101,"category":"Fundamental Analysis","title":"Understanding market cycles — using company financial statements"},{"id":102,"category":"Fundamental Analysis","title":"Trend continuation and trend exhaustion — using company financial statements"},{"id":103,"category":"Fundamental Analysis","title":"Range-bound market behavior — using company financial statements"},{"id":104,"category":"Fundamental Analysis","title":"Breakout confirmation — using company financial statements"},{"id":105,"category":"Fundamental Analysis","title":"False breakouts — using company financial statements"},{"id":106,"category":"Fundamental Analysis","title":"Pullback behavior — using company financial statements"},{"id":107,"category":"Fundamental Analysis","title":"Support and resistance zones — using company financial statements"},{"id":108,"category":"Fundamental Analysis","title":"Price and volume relationships — using company financial statements"},{"id":109,"category":"Fundamental Analysis","title":"Market breadth — using company financial statements"},{"id":110,"category":"Fundamental Analysis","title":"Relative strength analysis — using company financial statements"},{"id":111,"category":"Fundamental Analysis","title":"Liquidity and bid-ask spreads — using company financial statements"},{"id":112,"category":"Fundamental Analysis","title":"Volatility clustering — using company financial statements"},{"id":113,"category":"Fundamental Analysis","title":"Moving-average behavior — using company financial statements"},{"id":114,"category":"Fundamental Analysis","title":"Momentum indicators — using company financial statements"},{"id":115,"category":"Fundamental Analysis","title":"Mean-reversion signals — using company financial statements"},{"id":116,"category":"Fundamental Analysis","title":"Candlestick pattern research — using company financial statements"},{"id":117,"category":"Fundamental Analysis","title":"Gap behavior — using company financial statements"},{"id":118,"category":"Fundamental Analysis","title":"Earnings-event reactions — using company financial statements"},{"id":119,"category":"Fundamental Analysis","title":"Corporate announcement reactions — using company financial statements"},{"id":120,"category":"Fundamental Analysis","title":"Sector rotation — using company financial statements"},{"id":121,"category":"Fundamental Analysis","title":"Revenue growth — using company financial statements"},{"id":122,"category":"Fundamental Analysis","title":"Earnings growth — using company financial statements"},{"id":123,"category":"Fundamental Analysis","title":"Profit margins — using company financial statements"},{"id":124,"category":"Fundamental Analysis","title":"Return on equity — using company financial statements"},{"id":125,"category":"Fundamental Analysis","title":"Free cash flow — using company financial statements"},{"id":126,"category":"Fundamental Analysis","title":"Debt and balance-sheet strength — using company financial statements"},{"id":127,"category":"Fundamental Analysis","title":"Dividend policy — using company financial statements"},{"id":128,"category":"Fundamental Analysis","title":"Valuation multiples — using company financial statements"},{"id":129,"category":"Fundamental Analysis","title":"Institutional ownership — using company financial statements"},{"id":130,"category":"Fundamental Analysis","title":"Promoter ownership — using company financial statements"},{"id":131,"category":"Fundamental Analysis","title":"Portfolio diversification — using company financial statements"},{"id":132,"category":"Fundamental Analysis","title":"Position sizing — using company financial statements"},{"id":133,"category":"Fundamental Analysis","title":"Maximum drawdown — using company financial statements"},{"id":134,"category":"Fundamental Analysis","title":"Stress testing — using company financial statements"},{"id":135,"category":"Fundamental Analysis","title":"Correlation risk — using company financial statements"},{"id":136,"category":"Fundamental Analysis","title":"Behavioral biases — using company financial statements"},{"id":137,"category":"Fundamental Analysis","title":"Investor sentiment — using company financial statements"},{"id":138,"category":"Fundamental Analysis","title":"Inflation and interest rates — using company financial statements"},{"id":139,"category":"Fundamental Analysis","title":"Currency movements — using company financial statements"},{"id":140,"category":"Fundamental Analysis","title":"Commodity prices — using company financial statements"},{"id":141,"category":"Fundamental Analysis","title":"Foreign institutional flows — using company financial statements"},{"id":142,"category":"Fundamental Analysis","title":"Index rebalancing — using company financial statements"},{"id":143,"category":"Fundamental Analysis","title":"Open interest — using company financial statements"},{"id":144,"category":"Fundamental Analysis","title":"Implied volatility — using company financial statements"},{"id":145,"category":"Fundamental Analysis","title":"Option expiry behavior — using company financial statements"},{"id":146,"category":"Fundamental Analysis","title":"Market-data quality — using company financial statements"},{"id":147,"category":"Fundamental Analysis","title":"Backtest bias — using company financial statements"},{"id":148,"category":"Fundamental Analysis","title":"Event-study methodology — using company financial statements"},{"id":149,"category":"Fundamental Analysis","title":"ESG disclosure — using company financial statements"},{"id":150,"category":"Fundamental Analysis","title":"Corporate governance — using company financial statements"},{"id":151,"category":"Risk Management","title":"Understanding market cycles — using portfolio-risk measures"},{"id":152,"category":"Risk Management","title":"Trend continuation and trend exhaustion — using portfolio-risk measures"},{"id":153,"category":"Risk Management","title":"Range-bound market behavior — using portfolio-risk measures"},{"id":154,"category":"Risk Management","title":"Breakout confirmation — using portfolio-risk measures"},{"id":155,"category":"Risk Management","title":"False breakouts — using portfolio-risk measures"},{"id":156,"category":"Risk Management","title":"Pullback behavior — using portfolio-risk measures"},{"id":157,"category":"Risk Management","title":"Support and resistance zones — using portfolio-risk measures"},{"id":158,"category":"Risk Management","title":"Price and volume relationships — using portfolio-risk measures"},{"id":159,"category":"Risk Management","title":"Market breadth — using portfolio-risk measures"},{"id":160,"category":"Risk Management","title":"Relative strength analysis — using portfolio-risk measures"},{"id":161,"category":"Risk Management","title":"Liquidity and bid-ask spreads — using portfolio-risk measures"},{"id":162,"category":"Risk Management","title":"Volatility clustering — using portfolio-risk measures"},{"id":163,"category":"Risk Management","title":"Moving-average behavior — using portfolio-risk measures"},{"id":164,"category":"Risk Management","title":"Momentum indicators — using portfolio-risk measures"},{"id":165,"category":"Risk Management","title":"Mean-reversion signals — using portfolio-risk measures"},{"id":166,"category":"Risk Management","title":"Candlestick pattern research — using portfolio-risk measures"},{"id":167,"category":"Risk Management","title":"Gap behavior — using portfolio-risk measures"},{"id":168,"category":"Risk Management","title":"Earnings-event reactions — using portfolio-risk measures"},{"id":169,"category":"Risk Management","title":"Corporate announcement reactions — using portfolio-risk measures"},{"id":170,"category":"Risk Management","title":"Sector rotation — using portfolio-risk measures"},{"id":171,"category":"Risk Management","title":"Revenue growth — using portfolio-risk measures"},{"id":172,"category":"Risk Management","title":"Earnings growth — using portfolio-risk measures"},{"id":173,"category":"Risk Management","title":"Profit margins — using portfolio-risk measures"},{"id":174,"category":"Risk Management","title":"Return on equity — using portfolio-risk measures"},{"id":175,"category":"Risk Management","title":"Free cash flow — using portfolio-risk measures"},{"id":176,"category":"Risk Management","title":"Debt and balance-sheet strength — using portfolio-risk measures"},{"id":177,"category":"Risk Management","title":"Dividend policy — using portfolio-risk measures"},{"id":178,"category":"Risk Management","title":"Valuation multiples — using portfolio-risk measures"},{"id":179,"category":"Risk Management","title":"Institutional ownership — using portfolio-risk measures"},{"id":180,"category":"Risk Management","title":"Promoter ownership — using portfolio-risk measures"},{"id":181,"category":"Risk Management","title":"Portfolio diversification — using portfolio-risk measures"},{"id":182,"category":"Risk Management","title":"Position sizing — using portfolio-risk measures"},{"id":183,"category":"Risk Management","title":"Maximum drawdown — using portfolio-risk measures"},{"id":184,"category":"Risk Management","title":"Stress testing — using portfolio-risk measures"},{"id":185,"category":"Risk Management","title":"Correlation risk — using portfolio-risk measures"},{"id":186,"category":"Risk Management","title":"Behavioral biases — using portfolio-risk measures"},{"id":187,"category":"Risk Management","title":"Investor sentiment — using portfolio-risk measures"},{"id":188,"category":"Risk Management","title":"Inflation and interest rates — using portfolio-risk measures"},{"id":189,"category":"Risk Management","title":"Currency movements — using portfolio-risk measures"},{"id":190,"category":"Risk Management","title":"Commodity prices — using portfolio-risk measures"},{"id":191,"category":"Risk Management","title":"Foreign institutional flows — using portfolio-risk measures"},{"id":192,"category":"Risk Management","title":"Index rebalancing — using portfolio-risk measures"},{"id":193,"category":"Risk Management","title":"Open interest — using portfolio-risk measures"},{"id":194,"category":"Risk Management","title":"Implied volatility — using portfolio-risk measures"},{"id":195,"category":"Risk Management","title":"Option expiry behavior — using portfolio-risk measures"},{"id":196,"category":"Risk Management","title":"Market-data quality — using portfolio-risk measures"},{"id":197,"category":"Risk Management","title":"Backtest bias — using portfolio-risk measures"},{"id":198,"category":"Risk Management","title":"Event-study methodology — using portfolio-risk measures"},{"id":199,"category":"Risk Management","title":"ESG disclosure — using portfolio-risk measures"},{"id":200,"category":"Risk Management","title":"Corporate governance — using portfolio-risk measures"},{"id":201,"category":"Trading Psychology","title":"Understanding market cycles — through behavioral-finance evidence"},{"id":202,"category":"Trading Psychology","title":"Trend continuation and trend exhaustion — through behavioral-finance evidence"},{"id":203,"category":"Trading Psychology","title":"Range-bound market behavior — through behavioral-finance evidence"},{"id":204,"category":"Trading Psychology","title":"Breakout confirmation — through behavioral-finance evidence"},{"id":205,"category":"Trading Psychology","title":"False breakouts — through behavioral-finance evidence"},{"id":206,"category":"Trading Psychology","title":"Pullback behavior — through behavioral-finance evidence"},{"id":207,"category":"Trading Psychology","title":"Support and resistance zones — through behavioral-finance evidence"},{"id":208,"category":"Trading Psychology","title":"Price and volume relationships — through behavioral-finance evidence"},{"id":209,"category":"Trading Psychology","title":"Market breadth — through behavioral-finance evidence"},{"id":210,"category":"Trading Psychology","title":"Relative strength analysis — through behavioral-finance evidence"},{"id":211,"category":"Trading Psychology","title":"Liquidity and bid-ask spreads — through behavioral-finance evidence"},{"id":212,"category":"Trading Psychology","title":"Volatility clustering — through behavioral-finance evidence"},{"id":213,"category":"Trading Psychology","title":"Moving-average behavior — through behavioral-finance evidence"},{"id":214,"category":"Trading Psychology","title":"Momentum indicators — through behavioral-finance evidence"},{"id":215,"category":"Trading Psychology","title":"Mean-reversion signals — through behavioral-finance evidence"},{"id":216,"category":"Trading Psychology","title":"Candlestick pattern research — through behavioral-finance evidence"},{"id":217,"category":"Trading Psychology","title":"Gap behavior — through behavioral-finance evidence"},{"id":218,"category":"Trading Psychology","title":"Earnings-event reactions — through behavioral-finance evidence"},{"id":219,"category":"Trading Psychology","title":"Corporate announcement reactions — through behavioral-finance evidence"},{"id":220,"category":"Trading Psychology","title":"Sector rotation — through behavioral-finance evidence"},{"id":221,"category":"Trading Psychology","title":"Revenue growth — through behavioral-finance evidence"},{"id":222,"category":"Trading Psychology","title":"Earnings growth — through behavioral-finance evidence"},{"id":223,"category":"Trading Psychology","title":"Profit margins — through behavioral-finance evidence"},{"id":224,"category":"Trading Psychology","title":"Return on equity — through behavioral-finance evidence"},{"id":225,"category":"Trading Psychology","title":"Free cash flow — through behavioral-finance evidence"},{"id":226,"category":"Trading Psychology","title":"Debt and balance-sheet strength — through behavioral-finance evidence"},{"id":227,"category":"Trading Psychology","title":"Dividend policy — through behavioral-finance evidence"},{"id":228,"category":"Trading Psychology","title":"Valuation multiples — through behavioral-finance evidence"},{"id":229,"category":"Trading Psychology","title":"Institutional ownership — through behavioral-finance evidence"},{"id":230,"category":"Trading Psychology","title":"Promoter ownership — through behavioral-finance evidence"},{"id":231,"category":"Trading Psychology","title":"Portfolio diversification — through behavioral-finance evidence"},{"id":232,"category":"Trading Psychology","title":"Position sizing — through behavioral-finance evidence"},{"id":233,"category":"Trading Psychology","title":"Maximum drawdown — through behavioral-finance evidence"},{"id":234,"category":"Trading Psychology","title":"Stress testing — through behavioral-finance evidence"},{"id":235,"category":"Trading Psychology","title":"Correlation risk — through behavioral-finance evidence"},{"id":236,"category":"Trading Psychology","title":"Behavioral biases — through behavioral-finance evidence"},{"id":237,"category":"Trading Psychology","title":"Investor sentiment — through behavioral-finance evidence"},{"id":238,"category":"Trading Psychology","title":"Inflation and interest rates — through behavioral-finance evidence"},{"id":239,"category":"Trading Psychology","title":"Currency movements — through behavioral-finance evidence"},{"id":240,"category":"Trading Psychology","title":"Commodity prices — through behavioral-finance evidence"},{"id":241,"category":"Trading Psychology","title":"Foreign institutional flows — through behavioral-finance evidence"},{"id":242,"category":"Trading Psychology","title":"Index rebalancing — through behavioral-finance evidence"},{"id":243,"category":"Trading Psychology","title":"Open interest — through behavioral-finance evidence"},{"id":244,"category":"Trading Psychology","title":"Implied volatility — through behavioral-finance evidence"},{"id":245,"category":"Trading Psychology","title":"Option expiry behavior — through behavioral-finance evidence"},{"id":246,"category":"Trading Psychology","title":"Market-data quality — through behavioral-finance evidence"},{"id":247,"category":"Trading Psychology","title":"Backtest bias — through behavioral-finance evidence"},{"id":248,"category":"Trading Psychology","title":"Event-study methodology — through behavioral-finance evidence"},{"id":249,"category":"Trading Psychology","title":"ESG disclosure — through behavioral-finance evidence"},{"id":250,"category":"Trading Psychology","title":"Corporate governance — through behavioral-finance evidence"},{"id":251,"category":"Macro & Economics","title":"Understanding market cycles — using macroeconomic indicators"},{"id":252,"category":"Macro & Economics","title":"Trend continuation and trend exhaustion — using macroeconomic indicators"},{"id":253,"category":"Macro & Economics","title":"Range-bound market behavior — using macroeconomic indicators"},{"id":254,"category":"Macro & Economics","title":"Breakout confirmation — using macroeconomic indicators"},{"id":255,"category":"Macro & Economics","title":"False breakouts — using macroeconomic indicators"},{"id":256,"category":"Macro & Economics","title":"Pullback behavior — using macroeconomic indicators"},{"id":257,"category":"Macro & Economics","title":"Support and resistance zones — using macroeconomic indicators"},{"id":258,"category":"Macro & Economics","title":"Price and volume relationships — using macroeconomic indicators"},{"id":259,"category":"Macro & Economics","title":"Market breadth — using macroeconomic indicators"},{"id":260,"category":"Macro & Economics","title":"Relative strength analysis — using macroeconomic indicators"},{"id":261,"category":"Macro & Economics","title":"Liquidity and bid-ask spreads — using macroeconomic indicators"},{"id":262,"category":"Macro & Economics","title":"Volatility clustering — using macroeconomic indicators"},{"id":263,"category":"Macro & Economics","title":"Moving-average behavior — using macroeconomic indicators"},{"id":264,"category":"Macro & Economics","title":"Momentum indicators — using macroeconomic indicators"},{"id":265,"category":"Macro & Economics","title":"Mean-reversion signals — using macroeconomic indicators"},{"id":266,"category":"Macro & Economics","title":"Candlestick pattern research — using macroeconomic indicators"},{"id":267,"category":"Macro & Economics","title":"Gap behavior — using macroeconomic indicators"},{"id":268,"category":"Macro & Economics","title":"Earnings-event reactions — using macroeconomic indicators"},{"id":269,"category":"Macro & Economics","title":"Corporate announcement reactions — using macroeconomic indicators"},{"id":270,"category":"Macro & Economics","title":"Sector rotation — using macroeconomic indicators"},{"id":271,"category":"Macro & Economics","title":"Revenue growth — using macroeconomic indicators"},{"id":272,"category":"Macro & Economics","title":"Earnings growth — using macroeconomic indicators"},{"id":273,"category":"Macro & Economics","title":"Profit margins — using macroeconomic indicators"},{"id":274,"category":"Macro & Economics","title":"Return on equity — using macroeconomic indicators"},{"id":275,"category":"Macro & Economics","title":"Free cash flow — using macroeconomic indicators"},{"id":276,"category":"Macro & Economics","title":"Debt and balance-sheet strength — using macroeconomic indicators"},{"id":277,"category":"Macro & Economics","title":"Dividend policy — using macroeconomic indicators"},{"id":278,"category":"Macro & Economics","title":"Valuation multiples — using macroeconomic indicators"},{"id":279,"category":"Macro & Economics","title":"Institutional ownership — using macroeconomic indicators"},{"id":280,"category":"Macro & Economics","title":"Promoter ownership — using macroeconomic indicators"},{"id":281,"category":"Macro & Economics","title":"Portfolio diversification — using macroeconomic indicators"},{"id":282,"category":"Macro & Economics","title":"Position sizing — using macroeconomic indicators"},{"id":283,"category":"Macro & Economics","title":"Maximum drawdown — using macroeconomic indicators"},{"id":284,"category":"Macro & Economics","title":"Stress testing — using macroeconomic indicators"},{"id":285,"category":"Macro & Economics","title":"Correlation risk — using macroeconomic indicators"},{"id":286,"category":"Macro & Economics","title":"Behavioral biases — using macroeconomic indicators"},{"id":287,"category":"Macro & Economics","title":"Investor sentiment — using macroeconomic indicators"},{"id":288,"category":"Macro & Economics","title":"Inflation and interest rates — using macroeconomic indicators"},{"id":289,"category":"Macro & Economics","title":"Currency movements — using macroeconomic indicators"},{"id":290,"category":"Macro & Economics","title":"Commodity prices — using macroeconomic indicators"},{"id":291,"category":"Macro & Economics","title":"Foreign institutional flows — using macroeconomic indicators"},{"id":292,"category":"Macro & Economics","title":"Index rebalancing — using macroeconomic indicators"},{"id":293,"category":"Macro & Economics","title":"Open interest — using macroeconomic indicators"},{"id":294,"category":"Macro & Economics","title":"Implied volatility — using macroeconomic indicators"},{"id":295,"category":"Macro & Economics","title":"Option expiry behavior — using macroeconomic indicators"},{"id":296,"category":"Macro & Economics","title":"Market-data quality — using macroeconomic indicators"},{"id":297,"category":"Macro & Economics","title":"Backtest bias — using macroeconomic indicators"},{"id":298,"category":"Macro & Economics","title":"Event-study methodology — using macroeconomic indicators"},{"id":299,"category":"Macro & Economics","title":"ESG disclosure — using macroeconomic indicators"},{"id":300,"category":"Macro & Economics","title":"Corporate governance — using macroeconomic indicators"},{"id":301,"category":"Indian Markets & Indices","title":"Understanding market cycles — in NSE and BSE market data"},{"id":302,"category":"Indian Markets & Indices","title":"Trend continuation and trend exhaustion — in NSE and BSE market data"},{"id":303,"category":"Indian Markets & Indices","title":"Range-bound market behavior — in NSE and BSE market data"},{"id":304,"category":"Indian Markets & Indices","title":"Breakout confirmation — in NSE and BSE market data"},{"id":305,"category":"Indian Markets & Indices","title":"False breakouts — in NSE and BSE market data"},{"id":306,"category":"Indian Markets & Indices","title":"Pullback behavior — in NSE and BSE market data"},{"id":307,"category":"Indian Markets & Indices","title":"Support and resistance zones — in NSE and BSE market data"},{"id":308,"category":"Indian Markets & Indices","title":"Price and volume relationships — in NSE and BSE market data"},{"id":309,"category":"Indian Markets & Indices","title":"Market breadth — in NSE and BSE market data"},{"id":310,"category":"Indian Markets & Indices","title":"Relative strength analysis — in NSE and BSE market data"},{"id":311,"category":"Indian Markets & Indices","title":"Liquidity and bid-ask spreads — in NSE and BSE market data"},{"id":312,"category":"Indian Markets & Indices","title":"Volatility clustering — in NSE and BSE market data"},{"id":313,"category":"Indian Markets & Indices","title":"Moving-average behavior — in NSE and BSE market data"},{"id":314,"category":"Indian Markets & Indices","title":"Momentum indicators — in NSE and BSE market data"},{"id":315,"category":"Indian Markets & Indices","title":"Mean-reversion signals — in NSE and BSE market data"},{"id":316,"category":"Indian Markets & Indices","title":"Candlestick pattern research — in NSE and BSE market data"},{"id":317,"category":"Indian Markets & Indices","title":"Gap behavior — in NSE and BSE market data"},{"id":318,"category":"Indian Markets & Indices","title":"Earnings-event reactions — in NSE and BSE market data"},{"id":319,"category":"Indian Markets & Indices","title":"Corporate announcement reactions — in NSE and BSE market data"},{"id":320,"category":"Indian Markets & Indices","title":"Sector rotation — in NSE and BSE market data"},{"id":321,"category":"Indian Markets & Indices","title":"Revenue growth — in NSE and BSE market data"},{"id":322,"category":"Indian Markets & Indices","title":"Earnings growth — in NSE and BSE market data"},{"id":323,"category":"Indian Markets & Indices","title":"Profit margins — in NSE and BSE market data"},{"id":324,"category":"Indian Markets & Indices","title":"Return on equity — in NSE and BSE market data"},{"id":325,"category":"Indian Markets & Indices","title":"Free cash flow — in NSE and BSE market data"},{"id":326,"category":"Indian Markets & Indices","title":"Debt and balance-sheet strength — in NSE and BSE market data"},{"id":327,"category":"Indian Markets & Indices","title":"Dividend policy — in NSE and BSE market data"},{"id":328,"category":"Indian Markets & Indices","title":"Valuation multiples — in NSE and BSE market data"},{"id":329,"category":"Indian Markets & Indices","title":"Institutional ownership — in NSE and BSE market data"},{"id":330,"category":"Indian Markets & Indices","title":"Promoter ownership — in NSE and BSE market data"},{"id":331,"category":"Indian Markets & Indices","title":"Portfolio diversification — in NSE and BSE market data"},{"id":332,"category":"Indian Markets & Indices","title":"Position sizing — in NSE and BSE market data"},{"id":333,"category":"Indian Markets & Indices","title":"Maximum drawdown — in NSE and BSE market data"},{"id":334,"category":"Indian Markets & Indices","title":"Stress testing — in NSE and BSE market data"},{"id":335,"category":"Indian Markets & Indices","title":"Correlation risk — in NSE and BSE market data"},{"id":336,"category":"Indian Markets & Indices","title":"Behavioral biases — in NSE and BSE market data"},{"id":337,"category":"Indian Markets & Indices","title":"Investor sentiment — in NSE and BSE market data"},{"id":338,"category":"Indian Markets & Indices","title":"Inflation and interest rates — in NSE and BSE market data"},{"id":339,"category":"Indian Markets & Indices","title":"Currency movements — in NSE and BSE market data"},{"id":340,"category":"Indian Markets & Indices","title":"Commodity prices — in NSE and BSE market data"},{"id":341,"category":"Indian Markets & Indices","title":"Foreign institutional flows — in NSE and BSE market data"},{"id":342,"category":"Indian Markets & Indices","title":"Index rebalancing — in NSE and BSE market data"},{"id":343,"category":"Indian Markets & Indices","title":"Open interest — in NSE and BSE market data"},{"id":344,"category":"Indian Markets & Indices","title":"Implied volatility — in NSE and BSE market data"},{"id":345,"category":"Indian Markets & Indices","title":"Option expiry behavior — in NSE and BSE market data"},{"id":346,"category":"Indian Markets & Indices","title":"Market-data quality — in NSE and BSE market data"},{"id":347,"category":"Indian Markets & Indices","title":"Backtest bias — in NSE and BSE market data"},{"id":348,"category":"Indian Markets & Indices","title":"Event-study methodology — in NSE and BSE market data"},{"id":349,"category":"Indian Markets & Indices","title":"ESG disclosure — in NSE and BSE market data"},{"id":350,"category":"Indian Markets & Indices","title":"Corporate governance — in NSE and BSE market data"},{"id":351,"category":"Derivatives & Market Structure","title":"Understanding market cycles — using futures and options data"},{"id":352,"category":"Derivatives & Market Structure","title":"Trend continuation and trend exhaustion — using futures and options data"},{"id":353,"category":"Derivatives & Market Structure","title":"Range-bound market behavior — using futures and options data"},{"id":354,"category":"Derivatives & Market Structure","title":"Breakout confirmation — using futures and options data"},{"id":355,"category":"Derivatives & Market Structure","title":"False breakouts — using futures and options data"},{"id":356,"category":"Derivatives & Market Structure","title":"Pullback behavior — using futures and options data"},{"id":357,"category":"Derivatives & Market Structure","title":"Support and resistance zones — using futures and options data"},{"id":358,"category":"Derivatives & Market Structure","title":"Price and volume relationships — using futures and options data"},{"id":359,"category":"Derivatives & Market Structure","title":"Market breadth — using futures and options data"},{"id":360,"category":"Derivatives & Market Structure","title":"Relative strength analysis — using futures and options data"},{"id":361,"category":"Derivatives & Market Structure","title":"Liquidity and bid-ask spreads — using futures and options data"},{"id":362,"category":"Derivatives & Market Structure","title":"Volatility clustering — using futures and options data"},{"id":363,"category":"Derivatives & Market Structure","title":"Moving-average behavior — using futures and options data"},{"id":364,"category":"Derivatives & Market Structure","title":"Momentum indicators — using futures and options data"},{"id":365,"category":"Derivatives & Market Structure","title":"Mean-reversion signals — using futures and options data"},{"id":366,"category":"Derivatives & Market Structure","title":"Candlestick pattern research — using futures and options data"},{"id":367,"category":"Derivatives & Market Structure","title":"Gap behavior — using futures and options data"},{"id":368,"category":"Derivatives & Market Structure","title":"Earnings-event reactions — using futures and options data"},{"id":369,"category":"Derivatives & Market Structure","title":"Corporate announcement reactions — using futures and options data"},{"id":370,"category":"Derivatives & Market Structure","title":"Sector rotation — using futures and options data"},{"id":371,"category":"Derivatives & Market Structure","title":"Revenue growth — using futures and options data"},{"id":372,"category":"Derivatives & Market Structure","title":"Earnings growth — using futures and options data"},{"id":373,"category":"Derivatives & Market Structure","title":"Profit margins — using futures and options data"},{"id":374,"category":"Derivatives & Market Structure","title":"Return on equity — using futures and options data"},{"id":375,"category":"Derivatives & Market Structure","title":"Free cash flow — using futures and options data"},{"id":376,"category":"Derivatives & Market Structure","title":"Debt and balance-sheet strength — using futures and options data"},{"id":377,"category":"Derivatives & Market Structure","title":"Dividend policy — using futures and options data"},{"id":378,"category":"Derivatives & Market Structure","title":"Valuation multiples — using futures and options data"},{"id":379,"category":"Derivatives & Market Structure","title":"Institutional ownership — using futures and options data"},{"id":380,"category":"Derivatives & Market Structure","title":"Promoter ownership — using futures and options data"},{"id":381,"category":"Derivatives & Market Structure","title":"Portfolio diversification — using futures and options data"},{"id":382,"category":"Derivatives & Market Structure","title":"Position sizing — using futures and options data"},{"id":383,"category":"Derivatives & Market Structure","title":"Maximum drawdown — using futures and options data"},{"id":384,"category":"Derivatives & Market Structure","title":"Stress testing — using futures and options data"},{"id":385,"category":"Derivatives & Market Structure","title":"Correlation risk — using futures and options data"},{"id":386,"category":"Derivatives & Market Structure","title":"Behavioral biases — using futures and options data"},{"id":387,"category":"Derivatives & Market Structure","title":"Investor sentiment — using futures and options data"},{"id":388,"category":"Derivatives & Market Structure","title":"Inflation and interest rates — using futures and options data"},{"id":389,"category":"Derivatives & Market Structure","title":"Currency movements — using futures and options data"},{"id":390,"category":"Derivatives & Market Structure","title":"Commodity prices — using futures and options data"},{"id":391,"category":"Derivatives & Market Structure","title":"Foreign institutional flows — using futures and options data"},{"id":392,"category":"Derivatives & Market Structure","title":"Index rebalancing — using futures and options data"},{"id":393,"category":"Derivatives & Market Structure","title":"Open interest — using futures and options data"},{"id":394,"category":"Derivatives & Market Structure","title":"Implied volatility — using futures and options data"},{"id":395,"category":"Derivatives & Market Structure","title":"Option expiry behavior — using futures and options data"},{"id":396,"category":"Derivatives & Market Structure","title":"Market-data quality — using futures and options data"},{"id":397,"category":"Derivatives & Market Structure","title":"Backtest bias — using futures and options data"},{"id":398,"category":"Derivatives & Market Structure","title":"Event-study methodology — using futures and options data"},{"id":399,"category":"Derivatives & Market Structure","title":"ESG disclosure — using futures and options data"},{"id":400,"category":"Derivatives & Market Structure","title":"Corporate governance — using futures and options data"},{"id":401,"category":"Portfolio & Investing","title":"Understanding market cycles — using portfolio performance metrics"},{"id":402,"category":"Portfolio & Investing","title":"Trend continuation and trend exhaustion — using portfolio performance metrics"},{"id":403,"category":"Portfolio & Investing","title":"Range-bound market behavior — using portfolio performance metrics"},{"id":404,"category":"Portfolio & Investing","title":"Breakout confirmation — using portfolio performance metrics"},{"id":405,"category":"Portfolio & Investing","title":"False breakouts — using portfolio performance metrics"},{"id":406,"category":"Portfolio & Investing","title":"Pullback behavior — using portfolio performance metrics"},{"id":407,"category":"Portfolio & Investing","title":"Support and resistance zones — using portfolio performance metrics"},{"id":408,"category":"Portfolio & Investing","title":"Price and volume relationships — using portfolio performance metrics"},{"id":409,"category":"Portfolio & Investing","title":"Market breadth — using portfolio performance metrics"},{"id":410,"category":"Portfolio & Investing","title":"Relative strength analysis — using portfolio performance metrics"},{"id":411,"category":"Portfolio & Investing","title":"Liquidity and bid-ask spreads — using portfolio performance metrics"},{"id":412,"category":"Portfolio & Investing","title":"Volatility clustering — using portfolio performance metrics"},{"id":413,"category":"Portfolio & Investing","title":"Moving-average behavior — using portfolio performance metrics"},{"id":414,"category":"Portfolio & Investing","title":"Momentum indicators — using portfolio performance metrics"},{"id":415,"category":"Portfolio & Investing","title":"Mean-reversion signals — using portfolio performance metrics"},{"id":416,"category":"Portfolio & Investing","title":"Candlestick pattern research — using portfolio performance metrics"},{"id":417,"category":"Portfolio & Investing","title":"Gap behavior — using portfolio performance metrics"},{"id":418,"category":"Portfolio & Investing","title":"Earnings-event reactions — using portfolio performance metrics"},{"id":419,"category":"Portfolio & Investing","title":"Corporate announcement reactions — using portfolio performance metrics"},{"id":420,"category":"Portfolio & Investing","title":"Sector rotation — using portfolio performance metrics"},{"id":421,"category":"Portfolio & Investing","title":"Revenue growth — using portfolio performance metrics"},{"id":422,"category":"Portfolio & Investing","title":"Earnings growth — using portfolio performance metrics"},{"id":423,"category":"Portfolio & Investing","title":"Profit margins — using portfolio performance metrics"},{"id":424,"category":"Portfolio & Investing","title":"Return on equity — using portfolio performance metrics"},{"id":425,"category":"Portfolio & Investing","title":"Free cash flow — using portfolio performance metrics"},{"id":426,"category":"Portfolio & Investing","title":"Debt and balance-sheet strength — using portfolio performance metrics"},{"id":427,"category":"Portfolio & Investing","title":"Dividend policy — using portfolio performance metrics"},{"id":428,"category":"Portfolio & Investing","title":"Valuation multiples — using portfolio performance metrics"},{"id":429,"category":"Portfolio & Investing","title":"Institutional ownership — using portfolio performance metrics"},{"id":430,"category":"Portfolio & Investing","title":"Promoter ownership — using portfolio performance metrics"},{"id":431,"category":"Portfolio & Investing","title":"Portfolio diversification — using portfolio performance metrics"},{"id":432,"category":"Portfolio & Investing","title":"Position sizing — using portfolio performance metrics"},{"id":433,"category":"Portfolio & Investing","title":"Maximum drawdown — using portfolio performance metrics"},{"id":434,"category":"Portfolio & Investing","title":"Stress testing — using portfolio performance metrics"},{"id":435,"category":"Portfolio & Investing","title":"Correlation risk — using portfolio performance metrics"},{"id":436,"category":"Portfolio & Investing","title":"Behavioral biases — using portfolio performance metrics"},{"id":437,"category":"Portfolio & Investing","title":"Investor sentiment — using portfolio performance metrics"},{"id":438,"category":"Portfolio & Investing","title":"Inflation and interest rates — using portfolio performance metrics"},{"id":439,"category":"Portfolio & Investing","title":"Currency movements — using portfolio performance metrics"},{"id":440,"category":"Portfolio & Investing","title":"Commodity prices — using portfolio performance metrics"},{"id":441,"category":"Portfolio & Investing","title":"Foreign institutional flows — using portfolio performance metrics"},{"id":442,"category":"Portfolio & Investing","title":"Index rebalancing — using portfolio performance metrics"},{"id":443,"category":"Portfolio & Investing","title":"Open interest — using portfolio performance metrics"},{"id":444,"category":"Portfolio & Investing","title":"Implied volatility — using portfolio performance metrics"},{"id":445,"category":"Portfolio & Investing","title":"Option expiry behavior — using portfolio performance metrics"},{"id":446,"category":"Portfolio & Investing","title":"Market-data quality — using portfolio performance metrics"},{"id":447,"category":"Portfolio & Investing","title":"Backtest bias — using portfolio performance metrics"},{"id":448,"category":"Portfolio & Investing","title":"Event-study methodology — using portfolio performance metrics"},{"id":449,"category":"Portfolio & Investing","title":"ESG disclosure — using portfolio performance metrics"},{"id":450,"category":"Portfolio & Investing","title":"Corporate governance — using portfolio performance metrics"},{"id":451,"category":"FinTech, Data & Research Methods","title":"Understanding market cycles — using reproducible financial datasets"},{"id":452,"category":"FinTech, Data & Research Methods","title":"Trend continuation and trend exhaustion — using reproducible financial datasets"},{"id":453,"category":"FinTech, Data & Research Methods","title":"Range-bound market behavior — using reproducible financial datasets"},{"id":454,"category":"FinTech, Data & Research Methods","title":"Breakout confirmation — using reproducible financial datasets"},{"id":455,"category":"FinTech, Data & Research Methods","title":"False breakouts — using reproducible financial datasets"},{"id":456,"category":"FinTech, Data & Research Methods","title":"Pullback behavior — using reproducible financial datasets"},{"id":457,"category":"FinTech, Data & Research Methods","title":"Support and resistance zones — using reproducible financial datasets"},{"id":458,"category":"FinTech, Data & Research Methods","title":"Price and volume relationships — using reproducible financial datasets"},{"id":459,"category":"FinTech, Data & Research Methods","title":"Market breadth — using reproducible financial datasets"},{"id":460,"category":"FinTech, Data & Research Methods","title":"Relative strength analysis — using reproducible financial datasets"},{"id":461,"category":"FinTech, Data & Research Methods","title":"Liquidity and bid-ask spreads — using reproducible financial datasets"},{"id":462,"category":"FinTech, Data & Research Methods","title":"Volatility clustering — using reproducible financial datasets"},{"id":463,"category":"FinTech, Data & Research Methods","title":"Moving-average behavior — using reproducible financial datasets"},{"id":464,"category":"FinTech, Data & Research Methods","title":"Momentum indicators — using reproducible financial datasets"},{"id":465,"category":"FinTech, Data & Research Methods","title":"Mean-reversion signals — using reproducible financial datasets"},{"id":466,"category":"FinTech, Data & Research Methods","title":"Candlestick pattern research — using reproducible financial datasets"},{"id":467,"category":"FinTech, Data & Research Methods","title":"Gap behavior — using reproducible financial datasets"},{"id":468,"category":"FinTech, Data & Research Methods","title":"Earnings-event reactions — using reproducible financial datasets"},{"id":469,"category":"FinTech, Data & Research Methods","title":"Corporate announcement reactions — using reproducible financial datasets"},{"id":470,"category":"FinTech, Data & Research Methods","title":"Sector rotation — using reproducible financial datasets"},{"id":471,"category":"FinTech, Data & Research Methods","title":"Revenue growth — using reproducible financial datasets"},{"id":472,"category":"FinTech, Data & Research Methods","title":"Earnings growth — using reproducible financial datasets"},{"id":473,"category":"FinTech, Data & Research Methods","title":"Profit margins — using reproducible financial datasets"},{"id":474,"category":"FinTech, Data & Research Methods","title":"Return on equity — using reproducible financial datasets"},{"id":475,"category":"FinTech, Data & Research Methods","title":"Free cash flow — using reproducible financial datasets"},{"id":476,"category":"FinTech, Data & Research Methods","title":"Debt and balance-sheet strength — using reproducible financial datasets"},{"id":477,"category":"FinTech, Data & Research Methods","title":"Dividend policy — using reproducible financial datasets"},{"id":478,"category":"FinTech, Data & Research Methods","title":"Valuation multiples — using reproducible financial datasets"},{"id":479,"category":"FinTech, Data & Research Methods","title":"Institutional ownership — using reproducible financial datasets"},{"id":480,"category":"FinTech, Data & Research Methods","title":"Promoter ownership — using reproducible financial datasets"},{"id":481,"category":"FinTech, Data & Research Methods","title":"Portfolio diversification — using reproducible financial datasets"},{"id":482,"category":"FinTech, Data & Research Methods","title":"Position sizing — using reproducible financial datasets"},{"id":483,"category":"FinTech, Data & Research Methods","title":"Maximum drawdown — using reproducible financial datasets"},{"id":484,"category":"FinTech, Data & Research Methods","title":"Stress testing — using reproducible financial datasets"},{"id":485,"category":"FinTech, Data & Research Methods","title":"Correlation risk — using reproducible financial datasets"},{"id":486,"category":"FinTech, Data & Research Methods","title":"Behavioral biases — using reproducible financial datasets"},{"id":487,"category":"FinTech, Data & Research Methods","title":"Investor sentiment — using reproducible financial datasets"},{"id":488,"category":"FinTech, Data & Research Methods","title":"Inflation and interest rates — using reproducible financial datasets"},{"id":489,"category":"FinTech, Data & Research Methods","title":"Currency movements — using reproducible financial datasets"},{"id":490,"category":"FinTech, Data & Research Methods","title":"Commodity prices — using reproducible financial datasets"},{"id":491,"category":"FinTech, Data & Research Methods","title":"Foreign institutional flows — using reproducible financial datasets"},{"id":492,"category":"FinTech, Data & Research Methods","title":"Index rebalancing — using reproducible financial datasets"},{"id":493,"category":"FinTech, Data & Research Methods","title":"Open interest — using reproducible financial datasets"},{"id":494,"category":"FinTech, Data & Research Methods","title":"Implied volatility — using reproducible financial datasets"},{"id":495,"category":"FinTech, Data & Research Methods","title":"Option expiry behavior — using reproducible financial datasets"},{"id":496,"category":"FinTech, Data & Research Methods","title":"Market-data quality — using reproducible financial datasets"},{"id":497,"category":"FinTech, Data & Research Methods","title":"Backtest bias — using reproducible financial datasets"},{"id":498,"category":"FinTech, Data & Research Methods","title":"Event-study methodology — using reproducible financial datasets"},{"id":499,"category":"FinTech, Data & Research Methods","title":"ESG disclosure — using reproducible financial datasets"},{"id":500,"category":"FinTech, Data & Research Methods","title":"Corporate governance — using reproducible financial datasets"}];
+const researchCategories=['All',...new Set(researchTopics.map(x=>x.category))];
+let activeResearchCategory='All';
+function renderResearchTabs(){
+  const el=$("researchTabs"); if(!el)return;
+  el.innerHTML=researchCategories.map(c=>`<button class="research-tab ${c==='All'?'active':''}" type="button" data-rcat="${c}">${c}</button>`).join('');
+  el.querySelectorAll('[data-rcat]').forEach(btn=>btn.onclick=()=>{
+    activeResearchCategory=btn.dataset.rcat;
+    el.querySelectorAll('.research-tab').forEach(b=>b.classList.toggle('active',b===btn));
+    renderResearchList();
+  });
+}
+function renderResearchList(){
+  const list=$("researchList"), search=($("researchSearch")?.value||'').trim().toLowerCase();
+  if(!list)return;
+  const filtered=researchTopics.filter(x=>(activeResearchCategory==='All'||x.category===activeResearchCategory)&&(!search||`${x.title} ${x.category}`.toLowerCase().includes(search)));
+  $("researchCount").textContent=`${filtered.length} of 500 topics`;
+  list.innerHTML=filtered.length?filtered.map(x=>`<div class="research-item" onclick="openResearchTopic(${x.id})"><div class="research-item-main"><div class="research-num">RESEARCH ${String(x.id).padStart(3,'0')}</div><div class="research-title">${x.title}</div><div class="research-category">${x.category}</div></div><button class="research-open" type="button" onclick="event.stopPropagation();openResearchTopic(${x.id})">Open</button></div>`).join(''):`<div class="research-empty">No research topic found.</div>`;
+}
+function openResearchTopic(id){
+  const x=researchTopics.find(t=>t.id===Number(id)); if(!x)return;
+  const safeTitle=x.title.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const safeCat=x.category.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  $("articleContent").innerHTML=`<h2>${safeTitle}</h2><p class="contact-note">Category: ${safeCat} • Educational research topic</p><h3>Research focus</h3><p>This topic is presented for educational research. Define a clear question, choose a period and sample, document the data source, and separate observed evidence from conclusions.</p><h3>Suggested research questions</h3><ul><li>What patterns can be observed in the selected period?</li><li>Which variables are most relevant to the topic?</li><li>How does the result change across different market conditions?</li><li>What limitations or data-quality issues should be considered?</li></ul><p class="contact-note">Educational content only. Not investment advice or a recommendation to buy or sell any security.</p><br><button class="action" type="button" onclick="showPage('research')">← Back to Research Centre</button>`;
+  showPage('article');
+}
+function openResearch(k){
+  const map={trends:1,risk:32,technical:63};
+  openResearchTopic(map[k]||1);
+}
+function initResearchCentre(){
+  renderResearchTabs();
+  const input=$("researchSearch"); if(input)input.addEventListener('input',renderResearchList);
+  renderResearchList();
+}
+initResearchCentre();
+
+/* EDUCATION */
+const modules={
+  fundamentals:"<h2>Trading Fundamentals</h2><p>Learn stocks, exchanges, orders, bids, asks and basic market concepts.</p>",
+  ta:"<h2>Technical Analysis</h2><p>Learn charts, trends, support/resistance, volume and indicators.</p>",
+  rm:"<h2>Risk Management</h2><p>Learn position sizing, risk limits, diversification and journaling.</p>",
+  psych:"<h2>Trading Psychology</h2><p>Learn discipline, emotions and decision-making in trading.</p>"
+};
+function openModule(k){
+  $("articleContent").innerHTML=modules[k]+`<br><button class="action" type="button" onclick="showPage('education')">← Back</button>`;
+  showPage("article");
+}
+
+/* EDUCATION LIBRARY — 600 MODULES */
+const educationCategories=[
+  "Trading Foundations","Technical Analysis","Market Structure","Price Action",
+  "Risk Management","Trading Psychology","Fundamental Analysis","Portfolio Management",
+  "Derivatives","Market Research"
+];
+const educationTopics=[
+  "Understanding market cycles","Support and resistance","Trend identification","Breakout confirmation",
+  "False breakout analysis","Pullback strategies","Range-bound markets","Momentum and trend strength",
+  "Volume and price relationships","Candlestick interpretation","Chart patterns","Moving averages",
+  "Relative strength","Volatility analysis","Liquidity and bid-ask spreads","Market breadth",
+  "Gap analysis","Event-driven market reactions","Sector rotation","Intermarket relationships",
+  "Revenue and earnings analysis","Profit margins","Balance-sheet strength","Cash-flow analysis",
+  "Valuation fundamentals","Dividend analysis","Position sizing","Stop-loss planning",
+  "Risk-reward frameworks","Portfolio diversification","Correlation and concentration risk","Trading discipline",
+  "Emotional decision-making","Trading journals","Performance review","Options basics",
+  "Futures basics","Options pricing concepts","Greeks and sensitivity","Hedging principles",
+  "Scenario analysis","Backtesting concepts","Trade execution","Order types","Slippage and costs",
+  "Market news analysis","Economic indicators","Interest-rate effects","Inflation and markets",
+  "Currency-market relationships","Commodity-market relationships","Global market linkages",
+  "Research methodology","Hypothesis testing","Data quality","Bias and uncertainty",
+  "Strategy development","Strategy validation","Drawdown management","Capital preservation",
+  "Long-term investing principles","Systematic decision-making"
+];
+const educationModules=Array.from({length:600},(_,i)=>{
+  const category=educationCategories[Math.floor(i/60)];
+  const topic=educationTopics[i%educationTopics.length];
+  const level=i%3===0?"Beginner":i%3===1?"Intermediate":"Advanced";
+  return {id:i+1,category,topic,title:`${category} — ${topic}`,level};
+});
+function renderEducationList(){
+  const list=$("educationList"), input=$("educationSearch");
+  if(!list)return;
+  const q=(input?.value||"").trim().toLowerCase();
+  const filtered=educationModules.filter(m=>
+    `${m.id} ${m.category} ${m.topic} ${m.title} ${m.level}`.toLowerCase().includes(q)
+  );
+  if($("educationCount")) $("educationCount").textContent=q ? `${filtered.length} of 600 Modules` : "600 Modules";
+  if(!filtered.length){
+    list.innerHTML='<div class="education-empty">No education module found.</div>';
+    return;
+  }
+  list.innerHTML=filtered.map(m=>`
+    <div class="education-item">
+      <div class="education-id">${String(m.id).padStart(3,"0")}</div>
+      <div>
+        <div class="education-title">${m.title}</div>
+        <div class="education-meta">${m.category} • ${m.level}</div>
+      </div>
+      <div class="education-actions">
+        <button class="action" type="button" onclick="openEducationModule(${m.id})">Browse / Open</button>
+      </div>
+    </div>
+  `).join("");
+}
+function openEducationModule(id){
+  const m=educationModules.find(x=>x.id===id);
+  if(!m)return;
+  $("articleContent").innerHTML=`
+    <h2>${m.title}</h2>
+    <p><b>Module ${String(m.id).padStart(3,"0")}</b> • ${m.level}</p>
+    <p>This educational module covers ${m.topic.toLowerCase()} within ${m.category.toLowerCase()}. Use it for learning and study; it is not investment advice.</p>
+    <p class="contact-note">Educational content only. Not investment advice or a recommendation to buy or sell any security.</p>
+    <br><button class="action" type="button" onclick="showPage('education')">← Back to Education</button>`;
+  showPage("article");
+}
+const educationSearch=$("educationSearch");
+if(educationSearch) educationSearch.addEventListener("input",renderEducationList);
+renderEducationList();
+
+/* PROFILE */
+function loadProfile(){
+  const name=localStorage.getItem("alphaedge_name")||"";
+  const mobile=localStorage.getItem("alphaedge_mobile")||"";
+  const email=localStorage.getItem("alphaedge_email")||"";
+  if($("profileName")) $("profileName").value=name;
+  if($("profileMobile")) $("profileMobile").value=mobile;
+  if($("profileEmail")) $("profileEmail").value=email;
+  if($("profileAvatar")) $("profileAvatar").textContent=(name.trim().split(/\s+/).map(x=>x[0]).join("").slice(0,2)||"AE").toUpperCase();
+}
+if($("profilePhoto")) $("profilePhoto").addEventListener("change",e=>{
+  const f=e.target.files?.[0]; if(!f)return;
+  const r=new FileReader(); r.onload=()=>{ localStorage.setItem("alphaedge_profile_photo",r.result); const a=$("profileAvatar"); if(a)a.innerHTML=`<img src="${r.result}" alt="Profile photo">`; }; r.readAsDataURL(f);
+});
+if($("profileForm")) $("profileForm").onsubmit=async e=>{
+  e.preventDefault();
+  const name=$("profileName").value.trim(), mobile=$("profileMobile").value.trim(), email=$("profileEmail").value.trim(), password=$("profilePassword").value;
+  localStorage.setItem("alphaedge_name",name); localStorage.setItem("alphaedge_mobile",mobile); localStorage.setItem("alphaedge_email",email);
+  if(password) localStorage.setItem("alphaedge_password",password);
+  greeting(); loadProfile();
+  $("profileSuccess").textContent="Profile updated successfully."; $("profileSuccess").style.display="block"; $("profileError").style.display="none";
+};
+loadProfile();
+const savedPhoto=localStorage.getItem("alphaedge_profile_photo");
+if(savedPhoto&&$("profileAvatar")) $("profileAvatar").innerHTML=`<img src="${savedPhoto}" alt="Profile photo">`;
+
+
+/* WHATSAPP ENQUIRY */
+$("contactForm").onsubmit=e=>{
+  e.preventDefault();
+  const mobile=$("contactMobile").value.replace(/\D/g,"");
+  if(!/^\d{10}$/.test(mobile)){
+    alert("Enter a valid 10-digit mobile number.");
+    return;
+  }
+  const msg=
+    `Hello AlphaEdge,%0A%0A`+
+    `Name: ${encodeURIComponent($("contactName").value.trim())}%0A`+
+    `Mobile: ${encodeURIComponent(mobile)}%0A`+
+    `Email: ${encodeURIComponent($("contactEmail").value.trim())}%0A%0A`+
+    `Message: ${encodeURIComponent($("contactMessage").value.trim())}`;
+  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`,"_blank","noopener");
+};
+
+/* CLOSE MODALS BY CLICKING OUTSIDE */
+document.querySelectorAll(".legal-overlay,.utility-overlay").forEach(x=>{
+  x.addEventListener("click",e=>{
+    if(e.target===x){
+      x.classList.remove("show");
+    }
+  });
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){
+    closeLegal();
+    closeUtility();
+  }
+});
+
+
+/* EQUITY HUB — full NSE/BSE equity universe + real market/history feed */
+const equityUniverse = [
+  /* fallback + index memberships; full NSE/BSE list is loaded from Upstox instrument master below */
+  ["Adani Enterprises","ADANIENT","NIFTY50"],["Adani Ports & SEZ","ADANIPORTS","NIFTY50"],
+  ["Apollo Hospitals","APOLLOHOSP","NIFTY50"],["Asian Paints","ASIANPAINT","NIFTY50"],
+  ["Axis Bank","AXISBANK","NIFTY50"],["Bajaj Auto","BAJAJ-AUTO","NIFTY50"],
+  ["Bajaj Finance","BAJFINANCE","NIFTY50"],["Bajaj Finserv","BAJAJFINSV","NIFTY50"],
+  ["Bharat Electronics","BEL","NIFTY50"],["Bharti Airtel","BHARTIARTL","NIFTY50"],
+  ["Britannia Industries","BRITANNIA","NIFTY50"],["Cipla","CIPLA","NIFTY50"],
+  ["Coal India","COALINDIA","NIFTY50"],["Divi's Laboratories","DIVISLAB","NIFTY50"],
+  ["Dr. Reddy's Laboratories","DRREDDY","NIFTY50"],["Eicher Motors","EICHERMOT","NIFTY50"],
+  ["Eternal","ETERNAL","NIFTY50"],["Grasim Industries","GRASIM","NIFTY50"],
+  ["HCL Technologies","HCLTECH","NIFTY50"],["HDFC Bank","HDFCBANK","NIFTY50"],
+  ["HDFC Life Insurance","HDFCLIFE","NIFTY50"],["Hindalco Industries","HINDALCO","NIFTY50"],
+  ["Hindustan Unilever","HINDUNILVR","NIFTY50"],["ICICI Bank","ICICIBANK","NIFTY50"],
+  ["Infosys","INFY","NIFTY50"],["ITC","ITC","NIFTY50"],["Jio Financial Services","JIOFIN","NIFTY50"],
+  ["JSW Steel","JSWSTEEL","NIFTY50"],["Kotak Mahindra Bank","KOTAKBANK","NIFTY50"],
+  ["Larsen & Toubro","LT","NIFTY50"],["Mahindra & Mahindra","M&M","NIFTY50"],
+  ["Maruti Suzuki India","MARUTI","NIFTY50"],["Max Healthcare Institute","MAXHEALTH","NIFTY50"],
+  ["Nestle India","NESTLEIND","NIFTY50"],["NTPC","NTPC","NIFTY50"],
+  ["Oil & Natural Gas Corporation","ONGC","NIFTY50"],["Power Grid Corporation","POWERGRID","NIFTY50"],
+  ["Reliance Industries","RELIANCE","NIFTY50"],["SBI Life Insurance","SBILIFE","NIFTY50"],
+  ["Shriram Finance","SHRIRAMFIN","NIFTY50"],["State Bank of India","SBIN","NIFTY50"],
+  ["Sun Pharma","SUNPHARMA","NIFTY50"],["Tata Consultancy Services","TCS","NIFTY50"],
+  ["Tata Consumer Products","TATACONSUM","NIFTY50"],["Tata Motors Passenger Vehicles","TMPV","NIFTY50"],
+  ["Tata Steel","TATASTEEL","NIFTY50"],["Tech Mahindra","TECHM","NIFTY50"],
+  ["Titan Company","TITAN","NIFTY50"],["Trent","TRENT","NIFTY50"],
+  ["UltraTech Cement","ULTRACEMCO","NIFTY50"],["Wipro","WIPRO","NIFTY50"],
+  ["InterGlobe Aviation","INDIGO","SENSEX"],
+  ["The Ramco Cements","RAMCOCEM",""],
+  ["AU Small Finance Bank","AUBANK","BANKNIFTY"],["Bank of Baroda","BANKBARODA","BANKNIFTY"],
+  ["Canara Bank","CANBK","BANKNIFTY"],["Federal Bank","FEDERALBNK","BANKNIFTY"],
+  ["IDFC First Bank","IDFCFIRSTB","BANKNIFTY"],["IndusInd Bank","INDUSINDBK","BANKNIFTY"],
+  ["Punjab National Bank","PNB","BANKNIFTY"],["Union Bank of India","UNIONBANK","BANKNIFTY"],
+  ["Yes Bank","YESBANK","BANKNIFTY"]
+];
+
+const equityMap = new Map();
+function addEquity(x){
+  if(!x || !x.symbol)return;
+  const key=(x.isin||x.symbol).toUpperCase();
+  const existing=equityMap.get(key);
+  if(existing){
+    if(x.exchange && !existing.exchanges.includes(x.exchange)) existing.exchanges.push(x.exchange);
+    if(x.instrumentKey && !existing.instrumentKeys.includes(x.instrumentKey)) existing.instrumentKeys.push(x.instrumentKey);
+    (x.indexes||[]).forEach(i=>{if(!existing.indexes.includes(i))existing.indexes.push(i);});
+    return;
+  }
+  equityMap.set(key,{...x,exchanges:x.exchange?[x.exchange]:[],instrumentKeys:x.instrumentKey?[x.instrumentKey]:[],indexes:[...(x.indexes||[])]});
+}
+
+/* Seed index membership immediately so the page never appears empty. */
+equityUniverse.forEach(([name,symbol,index])=>addEquity({name,symbol,indexes:[index],exchange:"NSE"}));
+
+const equityAll=()=>[...equityMap.values()];
+let equityFilter="all";
+let equitySearch="";
+const equityCache=new Map();
+
+function equityTags(x){
+  const tags=[];
+  x.exchanges.forEach(e=>tags.push(`<span class="eq-tag">${e}</span>`));
+  x.indexes.forEach(i=>tags.push(`<span class="eq-tag">${i==="NIFTY50"?"NIFTY 50":i==="BANKNIFTY"?"BANK NIFTY":i}</span>`));
+  return tags.join("");
+}
+function renderEquityList(){
+  const q=equitySearch.trim().toLowerCase();
+  const all=equityAll();
+  const arr=all.filter(x=>{
+    const filterOk=equityFilter==="all"||x.exchanges.includes(equityFilter)||x.indexes.includes(equityFilter);
+    const searchOk=!q||x.name.toLowerCase().includes(q)||x.symbol.toLowerCase().includes(q)||(x.isin||"").toLowerCase().includes(q);
+    return filterOk&&searchOk;
+  }).sort((a,b)=>a.name.localeCompare(b.name));
+  $("equityCount").textContent=`${arr.length} companies`;
+  $("equityList").innerHTML=arr.map(x=>{
+    const c=equityCache.get(x.symbol);
+    const price=c?.price!=null?fmtPrice(c.price):"--";
+    const ch=c?.changePct!=null?fmtPct(c.changePct):"--";
+    const cls=Number(c?.changePct)>=0?"up":"down";
+    const safe=encodeURIComponent(x.symbol);
+    return `<div class="equity-item" onclick="openEquity(decodeURIComponent('${safe}'))">
+      <div class="eq-main"><div class="eq-name">${x.name}</div><div class="eq-symbol">${x.symbol}${x.isin?` • ${x.isin}`:""}</div></div>
+      <div class="eq-tags">${equityTags(x)}</div>
+      <div class="eq-price"><div class="eq-ltp">${price}</div><div class="eq-change ${cls}">${ch}</div></div>
+    </div>`;
+  }).join("") || `<div class="contact-note" style="padding:20px;text-align:center">No company found.</div>`;
+}
+$("equitySearch").addEventListener("input",e=>{equitySearch=e.target.value;renderEquityList();});
+document.querySelectorAll(".eq-tab").forEach(b=>b.onclick=()=>{
+  equityFilter=b.dataset.filter;
+  document.querySelectorAll(".eq-tab").forEach(x=>x.classList.toggle("active",x===b));
+  renderEquityList();
+});
+renderEquityList();
+
+/* Upstox publishes the complete NSE/BSE BOD instrument master as public JSON.GZ.
+   We load it in-browser and keep only equity listings. No access token is needed for the master list. */
+async function loadUpstoxEquityUniverse(){
+  const url="https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz";
+  try{
+    const r=await fetch(url,{cache:"no-store",mode:"cors"});
+    if(!r.ok)throw new Error("Upstox instrument file unavailable: HTTP "+r.status);
+    const buf=await r.arrayBuffer();
+    const bytes=new Uint8Array(buf);
+    let text;
+    // Some browsers transparently decompress HTTP gzip. Only run gzip
+    // decompression when the downloaded bytes are actually gzip-compressed.
+    const isGzip=bytes.length>=2 && bytes[0]===0x1f && bytes[1]===0x8b;
+    if(isGzip){
+      if("DecompressionStream" in window){
+        const ds=new DecompressionStream("gzip");
+        text=await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
+      }else{
+        // Last-resort browser fallback.
+        if(!window.pako){
+          await new Promise((resolve,reject)=>{
+            const sc=document.createElement("script");
+            sc.src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js";
+            sc.onload=resolve; sc.onerror=()=>reject(new Error("gzip decoder unavailable"));
+            document.head.appendChild(sc);
+          });
+        }
+        text=new TextDecoder().decode(window.pako.ungzip(bytes));
+      }
+    }else{
+      text=new TextDecoder().decode(bytes);
+    }
+    const rows=JSON.parse(text);
+    if(!Array.isArray(rows))throw new Error("Invalid Upstox instrument master");
+    let count=0;
+    for(const z of rows){
+      if(!z || !["NSE_EQ","BSE_EQ"].includes(z.segment))continue;
+      if(!z.name || !z.trading_symbol || !z.instrument_key)continue;
+      // Upstox documents NSE_EQ/BSE_EQ as the equity segments. Keep all
+      // equity series (EQ/BE/etc.) and exclude anything explicitly marked INDEX.
+      if(z.instrument_type==="INDEX")continue;
+      const symbol=String(z.trading_symbol).trim();
+      const indexes=[];
+      for(const [,sym,index] of equityUniverse){
+        if(sym.toUpperCase()===symbol.toUpperCase())indexes.push(index);
+      }
+      addEquity({
+        name:String(z.short_name||z.name).trim(),
+        symbol,
+        isin:z.isin||"",
+        exchange:z.exchange,
+        instrumentKey:z.instrument_key,
+        indexes
+      });
+      count++;
+    }
+    renderEquityList();
+    $("equityCount").textContent=`${equityAll().length} companies`;
+    console.info("Upstox equity master loaded:",count,"records; unique companies:",equityAll().length);
+    return true;
+  }catch(err){
+    console.warn("Upstox equity master load failed; using built-in fallback list.",err);
+    // Keep the seeded index list visible instead of showing a misleading 0.
+    renderEquityList();
+    return false;
+  }
+}
+loadUpstoxEquityUniverse();
+
+async function fetchEquityQuotes(symbols){
+  const list=[...new Set((symbols||[]).map(s=>String(s||'').trim()).filter(Boolean))];
+  if(!list.length)return {};
+  try{
+    const r=await apiFetch('/api/market/equity-quotes?symbols='+encodeURIComponent(list.join(',')),{cache:'no-store'});
+    if(!r.ok)throw new Error('Equity market data unavailable');
+    const d=await r.json();
+    return d?.quotes&&typeof d.quotes==='object'?d.quotes:{};
+  }catch(err){
+    console.warn('Equity quote feed unavailable:',err);
+    return {};
+  }
+}
+
+async function loadEquityQuotes(){
+  const all=equityAll();
+  const quotes=await fetchEquityQuotes(all.map(x=>x.symbol));
+  for(const x of all){
+    const q=quotes[String(x.symbol).toUpperCase()];
+    if(!q)continue;
+    equityCache.set(x.symbol,{
+      price:q.price,
+      changePct:q.changePct,
+      provider:q.provider||'Upstox'
+    });
+  }
+  renderEquityList();
+}
+setTimeout(loadEquityQuotes,700);
+setInterval(loadEquityQuotes,10000);
+
+let equityChartRange='1d';
+let equityChartInterval='1';
+
+function chartRangeLabel(r){return ({'1d':'1D','1w':'1W','1m':'1M','3m':'3M','6m':'6M','1y':'1Y','5y':'5Y'})[r]||r;}
+function chartIntervalOptions(range){
+  if(range==='1d'||range==='1w') return [['1','1m'],['5','5m'],['15','15m'],['30','30m'],['60','1h']];
+  if(range==='1m') return [['1','1m'],['5','5m'],['15','15m'],['30','30m'],['60','1h']];
+  if(range==='3m') return [['30','30m'],['60','1h'],['day','1D']];
+  return [['day','1D']];
+}
+function setChartRange(range){
+  equityChartRange=range;
+  const opts=chartIntervalOptions(range);
+  if(!opts.some(([v])=>v===equityChartInterval)) equityChartInterval=opts[0][0];
+  document.querySelectorAll('.chart-range').forEach(b=>b.classList.toggle('active',b.dataset.range===range));
+  const sel=$('chartInterval');
+  if(sel){sel.innerHTML=opts.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');sel.value=equityChartInterval;}
+  const sym=$('equityDetailContent')?.dataset?.symbol;
+  if(sym){loadEquityHistory({symbol:sym});}
+}
+function setChartInterval(v){equityChartInterval=v;const sym=$('equityDetailContent')?.dataset?.symbol;if(sym)loadEquityHistory({symbol:sym});}
+
+let pendingEquitySymbol=null;
+function startSocialLogin(provider){
+  if(!['google','facebook','whatsapp','truecaller'].includes(provider)) return;
+  const next=pendingEquitySymbol ? "?nextSymbol="+encodeURIComponent(pendingEquitySymbol) : "";
+  if(provider==='whatsapp'){
+    const phone=prompt('Enter your WhatsApp mobile number with country code (e.g. +919876543210):');
+    if(!phone) return;
+    fetch(API_BASE+'/api/auth/whatsapp/request',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({phone,nextSymbol:pendingEquitySymbol||''})})
+      .then(async r=>{const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.message||'WhatsApp OTP could not be sent.'); return j;})
+      .then(()=>{
+        const otp=prompt('Enter the WhatsApp OTP sent to '+phone);
+        if(!otp) return;
+        return fetch(API_BASE+'/api/auth/whatsapp/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({phone,otp})});
+      })
+      .then(async r=>{if(!r) return; const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.message||'WhatsApp verification failed.'); localStorage.setItem('alphaedge_logged_in','1'); if(j.clientId)localStorage.setItem('alphaedge_client_id',j.clientId); const n=pendingEquitySymbol||''; if(n) openEquity(n); else location.reload();})
+      .catch(e=>alert(e.message));
+    return;
+  }
+  if(provider==='truecaller'){
+    fetch(API_BASE+'/api/auth/truecaller/init'+next,{credentials:'include'})
+      .then(async r=>{const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.message||'Truecaller login could not start.'); return j;})
+      .then(async j=>{
+        if(!j.deepLink || !j.requestId) throw new Error('Truecaller configuration is incomplete.');
+        const requestId=j.requestId;
+        // Android Mobile Web SDK: opening this URI launches the Truecaller app.
+        window.location.href=j.deepLink;
+        // After returning from Truecaller, poll our backend callback result.
+        let done=false;
+        for(let i=0;i<40 && !done;i++){
+          await new Promise(resolve=>setTimeout(resolve,1500));
+          try{
+            const r=await fetch(API_BASE+'/api/auth/truecaller/status?requestId='+encodeURIComponent(requestId),{credentials:'include',cache:'no-store'});
+            const d=await r.json().catch(()=>({}));
+            if(d.status==='success' && d.client){
+              done=true;
+              localStorage.setItem('alphaedge_logged_in','1');
+              if(d.client.clientId) localStorage.setItem('alphaedge_client_id',d.client.clientId);
+              localStorage.setItem('alphaedge_name',d.client.name||'');
+              localStorage.setItem('alphaedge_mobile',d.client.phone||'');
+              localStorage.setItem('alphaedge_email',d.client.email||'');
+              const n=pendingEquitySymbol||d.client.nextSymbol||'';
+              if(n) openEquity(n); else location.reload();
+            }else if(d.status==='error' || d.status==='expired'){
+              done=true; throw new Error(d.message||'Truecaller login failed.');
+            }
+          }catch(err){
+            if(done) throw err;
+          }
+        }
+        if(!done) throw new Error('Truecaller verification timed out. Please try again.');
+      })
+      .catch(e=>alert(e.message));
+    return;
+  }
+  window.location.href=API_BASE+"/api/auth/"+provider+next;
+}
+function openAuthForEquity(symbol){
+  pendingEquitySymbol=symbol;
+  $("loginScreen").classList.add("show");
+  switchAuth("register");
+  $("registerSuccess").style.display="none";
+  $("registerError").style.display="none";
+  const heading=document.querySelector("#registerPanel h2");
+  if(heading) heading.textContent="Register to view this stock";
+}
+async function openEquity(symbol){
+  if(localStorage.getItem("alphaedge_logged_in")!=="1"){
+    openAuthForEquity(symbol);
+    return;
+  }
+  const x=equityAll().find(v=>v.symbol===symbol);
+  if(!x)return;
+  equityChartRange='1d'; equityChartInterval='1';
+  showPage('equityDetail');
+  $('equityDetailContent').dataset.symbol=x.symbol;
+  $('equityDetailContent').innerHTML=`
+    <div class="detail-topbar"><button class="action" type="button" onclick="showPage('equityHub')">← Back</button><span class="equity-count">${x.exchanges.join(' / ')}</span></div>
+    <div class="detail-title">${x.name}</div>
+    <div class="detail-meta">${x.symbol}${x.isin?` • ${x.isin}`:''}</div>
+    <div class="detail-price-row"><div class="detail-price" id="detailPrice">Loading...</div><div id="detailChange" class="detail-change">--</div></div>
+    <div class="chart-toolbar" id="chartRanges">${['1d','1w','1m','3m','6m','1y','5y'].map(r=>`<button type="button" class="chart-range ${r==='1d'?'active':''}" data-range="${r}" onclick="setChartRange('${r}')">${chartRangeLabel(r)}</button>`).join('')}
+      <select id="chartInterval" class="chart-interval" onchange="setChartInterval(this.value)"></select>
+    </div>
+    <div class="history-wrap" id="historyChart"><div class="history-loading">Loading live chart...</div></div>
+    <div class="detail-tabs" id="detailTabs">
+      <button type="button" class="detail-tab active" data-tab="overview" onclick="setDetailTab('overview')">Overview</button>
+      <button type="button" class="detail-tab" data-tab="technicals" onclick="setDetailTab('technicals')">Technicals</button>
+      <button type="button" class="detail-tab" data-tab="news" onclick="setDetailTab('news')">News</button>
+      <button type="button" class="detail-tab" data-tab="events" onclick="setDetailTab('events')">Events</button>
+      <button type="button" class="detail-tab" data-tab="fno" onclick="setDetailTab('fno')">F&amp;O</button>
+    </div>
+    <div id="detailTabContent"></div>
+    <div class="history-note">Live quotes and historical OHLC candles are supplied through the connected Upstox market-data feed. Short ranges use intraday candles; longer periods use daily/weekly/monthly history according to the selected range.</div>`;
+  setChartRange('1d');
+  setDetailTab('overview');
+
+  let quote=equityCache.get(x.symbol);
+  if(!quote){
+    const quotes=await fetchEquityQuotes([x.symbol]);
+    const q=quotes[String(x.symbol).toUpperCase()];
+    if(q){quote={price:q.price,changePct:q.changePct,close:q.close,netChange:q.netChange,provider:q.provider||'Upstox'};equityCache.set(x.symbol,quote);}
+  }
+  if(quote&&Number.isFinite(Number(quote.price))){
+    $('detailPrice').textContent=fmtPrice(quote.price);
+    $('detailChange').textContent=fmtPct(quote.changePct);
+    $('detailChange').className='detail-change '+(Number(quote.changePct)>=0?'up':'down');
+    $('detailClose').textContent=quote.close!=null?fmtPrice(quote.close):'--';
+  }else{$('detailPrice').textContent='--';$('detailChange').textContent='Unavailable';}
+  renderEquityList();
+}
+
+let detailHistoryPoints=[];
+function detailTabButtons(tab){document.querySelectorAll('#detailTabs .detail-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));}
+function setDetailTab(tab){
+  detailTabButtons(tab); const host=$('detailTabContent'); if(!host)return;
+  if(tab==='overview'){
+    host.innerHTML=`<div class="detail-stats"><div class="detail-stat"><span>Open</span><b id="detailOpen">--</b></div><div class="detail-stat"><span>High</span><b id="detailHigh">--</b></div><div class="detail-stat"><span>Low</span><b id="detailLow">--</b></div><div class="detail-stat"><span>Prev. close</span><b id="detailClose">--</b></div><div class="detail-stat"><span>Volume</span><b id="detailVolume">--</b></div><div class="detail-stat"><span>Chart</span><b id="detailPeriod">--</b></div></div>`;
+    updateDetailStats(); return;
+  }
+  if(tab==='technicals'){
+    const p=detailHistoryPoints.filter(x=>Number.isFinite(x.v));
+    if(!p.length){host.innerHTML='<div class="detail-info">Technical data will appear when historical candles are available.</div>';return;}
+    const closes=p.map(x=>x.v), sma=(a,n)=>a.length<n?null:a.slice(-n).reduce((x,y)=>x+y,0)/n;
+    const sma20=sma(closes,20),sma50=sma(closes,50),look=Math.min(14,closes.length-1); let gains=0,losses=0;
+    for(let i=closes.length-look;i<closes.length;i++){const d=closes[i]-closes[i-1];if(d>=0)gains+=d;else losses-=d;}
+    const ag=look?gains/look:0,al=look?losses/look:0,rsi=al===0?100:100-(100/(1+ag/al)),hi=Math.max(...closes),lo=Math.min(...closes),last=closes.at(-1);
+    host.innerHTML=`<div class="detail-info-grid"><div class="detail-stat"><span>SMA 20</span><b>${sma20==null?'--':fmtPrice(sma20)}</b></div><div class="detail-stat"><span>SMA 50</span><b>${sma50==null?'--':fmtPrice(sma50)}</b></div><div class="detail-stat"><span>RSI 14</span><b>${Number.isFinite(rsi)?rsi.toFixed(2):'--'}</b></div><div class="detail-stat"><span>Period high</span><b>${fmtPrice(hi)}</b></div><div class="detail-stat"><span>Period low</span><b>${fmtPrice(lo)}</b></div><div class="detail-stat"><span>Trend</span><b>${sma20==null?'Insufficient data':last>sma20?'Above SMA 20':'Below SMA 20'}</b></div></div><div class="detail-info">Technical values are calculated from the candles currently loaded in the selected chart range.</div>`; return;
+  }
+  if(tab==='news'){host.innerHTML='<div class="detail-info-card"><h4>Latest News</h4><p>Live company-news feed is not connected yet. No news is being invented or displayed as if it were live.</p></div>';return;}
+  if(tab==='events'){host.innerHTML='<div class="detail-info-card"><h4>Events</h4><p>Corporate events such as results, dividends and board announcements will appear here when an events feed is connected.</p></div>';return;}
+  host.innerHTML='<div class="detail-info-card"><h4>F&amp;O</h4><p>Futures and options data is not connected for this equity yet.</p></div>';
+}
+function updateDetailStats(){
+  const p=detailHistoryPoints;if(!p.length)return;const last=p.at(-1),highs=p.map(x=>x.high).filter(Number.isFinite),lows=p.map(x=>x.low).filter(Number.isFinite);
+  if($('detailOpen'))$('detailOpen').textContent=Number.isFinite(last.open)?fmtPrice(last.open):'--';
+  if($('detailHigh'))$('detailHigh').textContent=highs.length?fmtPrice(Math.max(...highs)):'--';
+  if($('detailLow'))$('detailLow').textContent=lows.length?fmtPrice(Math.min(...lows)):'--';
+  if($('detailVolume'))$('detailVolume').textContent=Number.isFinite(last.volume)?Number(last.volume).toLocaleString('en-IN'):'--';
+}
+
+function drawHistory(points, range, interval){
+  if(!points.length){$('historyChart').innerHTML='<div class="history-loading">Chart data unavailable for this timeframe.</div>';return;}
+  const w=900,h=300,pad={l:8,r:8,t:14,b:30};
+  const vals=points.map(p=>p.v).filter(Number.isFinite);
+  const min=Math.min(...vals),max=Math.max(...vals),span=max-min||Math.max(max*0.01,1);
+  const path=points.map((pt,i)=>{const x=pad.l+i/(points.length-1||1)*(w-pad.l-pad.r);const y=pad.t+(max-pt.v)/span*(h-pad.t-pad.b);return `${i?'L':'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' ');
+  const first=points[0].d,last=points.at(-1).d;
+  const fill=`${path} L ${w-pad.r} ${h-pad.b} L ${pad.l} ${h-pad.b} Z`;
+  $('historyChart').innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="${chartRangeLabel(range)} price chart">
+    <defs><linearGradient id="chartFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#28d5a0" stop-opacity=".20"/><stop offset="1" stop-color="#28d5a0" stop-opacity="0"/></linearGradient></defs>
+    <path d="M0 ${h-pad.b}H${w}" stroke="#1b3244" stroke-width="1" fill="none"/>
+    <path d="${fill}" fill="url(#chartFade)"/>
+    <path d="${path}" stroke="#28d5a0" stroke-width="2.5" fill="none"/>
+    <text x="4" y="${h-8}" fill="#71879b" font-size="10">${first}</text>
+    <text x="${w-70}" y="${h-8}" fill="#71879b" font-size="10">${last}</text>
+  </svg>`;
+  $('detailPeriod').textContent=`${chartRangeLabel(range)} • ${interval==='60'?'1h':interval==='day'?'1D':interval==='1'&&range!=='1d'?'1D':interval+'m'}`;
+}
+
+async function loadEquityHistory(x){
+  const range=equityChartRange, interval=equityChartInterval;
+  $('historyChart').innerHTML='<div class="history-loading">Loading chart data...</div>';
+  try{
+    const r=await apiFetch('/api/market/history-v3?symbol='+encodeURIComponent(x.symbol)+'&range='+encodeURIComponent(range)+'&interval='+encodeURIComponent(interval),{cache:'no-store'});
+    if(!r.ok)throw new Error('Historical market data unavailable');
+    const d=await r.json();
+    const history=Array.isArray(d?.history)?d.history:[];
+    const points=[];
+    for(const row of history){
+      const date=new Date(row.date), v=Number(row.close);
+      if(!Number.isFinite(v)||Number.isNaN(date.getTime()))continue;
+      const label=range==='1d'?date.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):date.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:range==='5y'?'2-digit':undefined,timeZone:'Asia/Kolkata'});
+      points.push({v,d:label,open:Number(row.open),high:Number(row.high),low:Number(row.low),volume:Number(row.volume)});
+    }
+    detailHistoryPoints=points;
+    drawHistory(points,range,interval);
+    if(points.length){
+      const last=points.at(-1), first=points[0];
+      $('detailOpen').textContent=Number.isFinite(last.open)?fmtPrice(last.open):'--';
+      $('detailHigh').textContent=Number.isFinite(Math.max(...points.map(p=>p.high).filter(Number.isFinite)))?fmtPrice(Math.max(...points.map(p=>p.high).filter(Number.isFinite))):'--';
+      $('detailLow').textContent=Number.isFinite(Math.min(...points.map(p=>p.low).filter(Number.isFinite)))?fmtPrice(Math.min(...points.map(p=>p.low).filter(Number.isFinite))):'--';
+      $('detailVolume').textContent=Number.isFinite(last.volume)?Number(last.volume).toLocaleString('en-IN'):'--';
+    }
+  }catch(err){
+    console.warn('Equity history unavailable:',err);
+    $('historyChart').innerHTML='<div class="history-loading">Unable to load historical data right now. Please try again.</div>';
+  }
+}
+/* RESTORE SAVED STATE */
+let cid=localStorage.getItem("alphaedge_client_id");
+const socialParams=new URLSearchParams(window.location.search);
+const socialAuthToken=socialParams.get("authToken");
+if(socialAuthToken) localStorage.setItem("alphaedge_auth_token",socialAuthToken);
+if(socialParams.get("nextSymbol")) pendingEquitySymbol=socialParams.get("nextSymbol");
+async function restoreSession(){
+  const socialSuccess=socialParams.get("social")==="success";
+  const hasToken=!!localStorage.getItem("alphaedge_auth_token");
+  cid=localStorage.getItem("alphaedge_client_id");
+  if(!socialSuccess && (localStorage.getItem("alphaedge_logged_in")!=="1" || (!cid && !hasToken))) return;
+  try{
+    const r=await apiFetch("/api/auth/me",{method:"GET"});
+    if(!r.ok){
+      localStorage.removeItem("alphaedge_logged_in");
+      localStorage.removeItem("alphaedge_client_id");
+      localStorage.removeItem("alphaedge_name");
+      localStorage.removeItem("alphaedge_mobile");
+      localStorage.removeItem("alphaedge_email");
+      localStorage.removeItem("alphaedge_auth_token");
+      return;
+    }
+    const d=await r.json();
+    const u=d.client||{};
+    localStorage.setItem("alphaedge_client_id",u.clientId||cid);
+    localStorage.setItem("alphaedge_name",u.name||"");
+    localStorage.setItem("alphaedge_mobile",u.phone||"");
+    localStorage.setItem("alphaedge_email",u.email||"");
+    localStorage.setItem("alphaedge_logged_in","1");
+    $("loginScreen").classList.remove("show");
+    if(socialSuccess){
+      window.history.replaceState({},document.title,window.location.pathname);
+      const socialNext=pendingEquitySymbol;
+      pendingEquitySymbol=null;
+      if(socialNext) setTimeout(()=>openEquity(socialNext),0);
+    }
+    greeting();
+    loadProfile();
+  }catch(_){
+    $("loginScreen").classList.remove("show");
+    greeting();
+  }
+}
+$("footerYear").textContent=new Date().getFullYear();
+greeting();
+switchAuth("register");
+restoreSession();
+showPage("dashboard");
+</script>
+
+
+</body>
+</html>
