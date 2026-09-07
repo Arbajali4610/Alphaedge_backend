@@ -1,20 +1,21 @@
 {
-  "name": "alphaedge-backend",
+  "name": "alphaedge-live-market",
   "version": "1.0.0",
   "private": true,
+  "description": "AlphaEdge with protected live market feed and secure client authentication",
+  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
     "bcryptjs": "^3.0.2",
-    "dotenv": "^16.4.7",
+    "connect-pg-simple": "^10.0.0",
     "express": "^5.1.0",
-    "express-session": "^1.18.1",
+    "express-session": "^1.18.2",
+    "pg": "^8.16.3",
     "protobufjs": "^7.4.0",
     "ws": "^8.18.0"
   }
