@@ -1620,6 +1620,7 @@ app.post(
            FROM clients
            WHERE email = $1
            OR phone = $2
+           OR mobile = $2
            LIMIT 1`,
           [email, phone]
         );
@@ -1688,10 +1689,11 @@ app.post(
            phone,
            mobile,
            email,
-           password_hash
+           password_hash,
+           created_at
          )
          VALUES
-         ($1, $2, $3, $3, $4, '')`,
+         ($1, $2, $3, $3, $4, '', datetime('now'))`,
         [
           clientId,
           name,
