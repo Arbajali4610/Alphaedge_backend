@@ -7,10 +7,10 @@
     "dev": "node --watch server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "11.10.0",
     "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",

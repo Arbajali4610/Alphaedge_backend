@@ -6,8 +6,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: DATABASE_URL
-        sync: false
       - key: SESSION_SECRET
         generateValue: true
       - key: UPSTOX_ACCESS_TOKEN
