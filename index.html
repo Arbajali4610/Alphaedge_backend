@@ -415,15 +415,16 @@ body{color-scheme:light!important}
       <div class="brand-name">Alpha<span>Edge</span></div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:22px">
-      <button class="action" id="loginTab" type="button" onclick="switchAuth('login')" style="flex:1">Login</button>
-      <button class="action" id="registerTab" type="button" onclick="switchAuth('register')" style="flex:1;background:#28d5a0;color:#06131b">Register</button>
+      <button class="action" id="loginTab" type="button" onclick="switchAuth('login')" style="flex:1;background:#28d5a0;color:#06131b">Login</button>
+      <button class="action" id="registerTab" type="button" onclick="switchAuth('register')" style="flex:1">Register</button>
     </div>
 
-    <div id="loginPanel" style="display:none">
+    <div id="loginPanel">
       <h2>Welcome back</h2>
       <p class="contact-note">Login to your AlphaEdge workspace</p>
       <form class="form" id="loginForm">
         <label>Client ID *<input id="loginClientId" placeholder="e.g. AE100001" required autocomplete="username"></label>
+        <label>Password *<input id="loginPassword" type="password" minlength="8" required autocomplete="current-password"></label>
         <div style="display:flex;justify-content:space-between;gap:12px">
           <button type="button" class="legal-link" onclick="openForgotClient()">Forgot Client ID?</button>
           <button type="button" class="legal-link" onclick="openForgotPassword()">Forgot Password?</button>
@@ -453,10 +454,11 @@ body{color-scheme:light!important}
       </p>
     </div>
 
-    <div id="registerPanel">
+    <div id="registerPanel" style="display:none">
       <h2>Create your account</h2>
-      <p class="contact-note">Register with your mobile number and email ID.</p>
+      <p class="contact-note">Register using your mobile number and email ID.</p>
       <form class="form" id="registerForm">
+        <label>Full Name *<input id="regName" type="text" maxlength="100" required autocomplete="name"></label>
         <label>Mobile Number *<input id="regMobile" type="tel" inputmode="numeric" maxlength="10" required autocomplete="tel"></label>
         <label>Email ID *<input id="regEmail" type="email" required autocomplete="email"></label>
         <label class="terms">
@@ -1047,7 +1049,7 @@ function setupPasswordToggles(){
 syncLegalCheckboxes();
 bindLegalCheckboxes();
 setupPasswordToggles();
-switchAuth("register");
+switchAuth("login");
 loadRememberedLogin();
 
 /* LEGAL MODALS */
@@ -1097,8 +1099,15 @@ $("registerForm").onsubmit=async e=>{
   $("registerError").style.display="none";
   $("registerSuccess").style.display="none";
 
+  const name=$("regName").value.trim();
   const mobile=$("regMobile").value.replace(/\D/g,"");
   const email=$("regEmail").value.trim().toLowerCase();
+
+  if(!name){
+    $("registerError").textContent="Enter your full name.";
+    $("registerError").style.display="block";
+    return;
+  }
 
   if(!/^\d{10}$/.test(mobile)){
     $("registerError").textContent="Enter a valid 10-digit mobile number.";
@@ -1116,21 +1125,23 @@ $("registerForm").onsubmit=async e=>{
     return;
   }
 
+  $("loading").classList.add("show");
   try{
-    const r=await apiFetch("/api/auth/register",{method:"POST",body:{mobile,email}});
+    const r=await apiFetch("/api/auth/register",{method:"POST",body:{name,mobile,email}});
     const d=await r.json();
     if(!r.ok)throw new Error(d.message||"Registration failed.");
     const u=d.client||{};
-    const id=u.client_id||u.clientId||d.clientId;
-    if(id) localStorage.setItem("alphaedge_client_id",id);
+    const id=d.clientId||u.client_id||u.clientId;
     localStorage.setItem("alphaedge_logged_in","1");
+    localStorage.setItem("alphaedge_client_id",id||"");
     localStorage.setItem("alphaedge_name",u.name||"");
     localStorage.setItem("alphaedge_mobile",u.phone||u.mobile||mobile);
     localStorage.setItem("alphaedge_email",u.email||email);
-    localStorage.setItem("alphaedge_auth_token",d.authToken||"");
-    $("registerSuccess").innerHTML=id
-      ? "Account created successfully. Your Client ID is <b>"+id+"</b>."
-      : "Account created successfully.";
+    if(id){
+      $("registerSuccess").innerHTML="Account created successfully. Your Client ID is <b>"+id+"</b>.";
+    }else{
+      $("registerSuccess").textContent="Account created successfully.";
+    }
     $("registerSuccess").style.display="block";
     setTimeout(()=>{
       $("loginScreen").classList.remove("show");
@@ -1140,6 +1151,8 @@ $("registerForm").onsubmit=async e=>{
   }catch(e){
     $("registerError").textContent=e.message==="Failed to fetch"?"Backend unavailable. Check the backend service/CORS and try again.":e.message;
     $("registerError").style.display="block";
+  }finally{
+    $("loading").classList.remove("show");
   }
 };
 
@@ -1149,6 +1162,7 @@ $("loginForm").onsubmit=async e=>{
   $("loginError").style.display="none";
 
   const id=$("loginClientId").value.trim().toUpperCase();
+  const password=$("loginPassword").value;
   const remember=!!$("rememberMe")?.checked;
 
   if(remember){
@@ -1172,7 +1186,7 @@ $("loginForm").onsubmit=async e=>{
 
   $("loading").classList.add("show");
   try{
-    const r=await apiFetch("/api/auth/login",{method:"POST",body:{clientId:id,remember}});
+    const r=await apiFetch("/api/auth/login",{method:"POST",body:{clientId:id,password,remember}});
     const d=await r.json();
     if(!r.ok)throw new Error(d.message||"Invalid Client ID or password.");
     const u=d.client;
@@ -1274,6 +1288,7 @@ $("logout").onclick=async()=>{
     localStorage.removeItem("alphaedge_mobile");
     localStorage.removeItem("alphaedge_email");
     localStorage.removeItem("alphaedge_auth_token");
+    $("loginPassword").value="";
     legalAcceptedTerms=false;
     legalAcceptedPrivacy=false;
     syncLegalCheckboxes();
@@ -1881,11 +1896,7 @@ async function restoreSession(){
   const socialSuccess=socialParams.get("social")==="success";
   const hasToken=!!localStorage.getItem("alphaedge_auth_token");
   cid=localStorage.getItem("alphaedge_client_id");
-  if(!socialSuccess && (localStorage.getItem("alphaedge_logged_in")!=="1" || (!cid && !hasToken))){
-    $("loginScreen").classList.add("show");
-    switchAuth("register");
-    return;
-  }
+  if(!socialSuccess && (localStorage.getItem("alphaedge_logged_in")!=="1" || (!cid && !hasToken))) return;
   try{
     const r=await apiFetch("/api/auth/me",{method:"GET"});
     if(!r.ok){
@@ -1895,8 +1906,6 @@ async function restoreSession(){
       localStorage.removeItem("alphaedge_mobile");
       localStorage.removeItem("alphaedge_email");
       localStorage.removeItem("alphaedge_auth_token");
-      $("loginScreen").classList.add("show");
-      switchAuth("register");
       return;
     }
     const d=await r.json();
@@ -1916,13 +1925,13 @@ async function restoreSession(){
     greeting();
     loadProfile();
   }catch(_){
-    $("loginScreen").classList.add("show");
-    switchAuth("register");
+    $("loginScreen").classList.remove("show");
     greeting();
   }
 }
 $("footerYear").textContent=new Date().getFullYear();
 greeting();
+switchAuth("register");
 restoreSession();
 showPage("dashboard");
 </script>
