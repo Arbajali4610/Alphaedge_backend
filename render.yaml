@@ -6,6 +6,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: NODE_VERSION
+        value: "20.19.0"
       - key: SESSION_SECRET
         generateValue: true
       - key: UPSTOX_ACCESS_TOKEN
